@@ -321,21 +321,23 @@ export async function runInsights(config: InsightsRunConfig, onStream?: Insights
   try {
     await whenShellRuntimeReady();
     const wsl = getWslInfo();
+    const { command, env, engine } = await resolveClaudeEnv({ profileId: config.profileId });
+    const cli = engine === 'codex' ? 'codex' : 'claude';
+    const cliName = engine === 'codex' ? 'Codex CLI' : 'Claude Code CLI';
     if (wsl) {
-      // Claude Code runs inside WSL: the distribution's own claude (from the startup probe)
-      if (!wsl.tools.claude.path) {
-        throw new Error(formatInsightsError(INSIGHTS_ERROR_CODES.claudeCodeMissing, `Claude Code CLI not found in WSL (${wsl.distro})`));
+      // The CLI runs inside WSL: the distribution's own one (from the startup probe)
+      if (!wsl.tools[cli].path) {
+        throw new Error(formatInsightsError(INSIGHTS_ERROR_CODES.claudeCodeMissing, `${cliName} not found in WSL (${wsl.distro})`));
       }
     } else {
-      const cliInfo = await getToolInfoAsync('claude', { refreshIfMissing: true });
+      const cliInfo = await getToolInfoAsync(cli, { refreshIfMissing: true });
       if (!cliInfo.found) {
-        throw new Error(formatInsightsError(INSIGHTS_ERROR_CODES.claudeCodeMissing, cliInfo.message || 'Claude Code CLI not found'));
+        throw new Error(formatInsightsError(INSIGHTS_ERROR_CODES.claudeCodeMissing, cliInfo.message || `${cliName} not found`));
       }
     }
     const taskToolsRoute = getTaskToolsRoute();
     const offeredTaskTools = taskToolsRoute === 'off' ? undefined : config.taskTools;
 
-    const { command, env } = await resolveClaudeEnv({ profileId: config.profileId });
     if (graphify) {
       // graphify commands find the project's graph (GRAPHIFY_OUT, translated for WSL when the
       // run starts) and run without a full path (natively; in WSL from the login PATH)
@@ -364,6 +366,7 @@ export async function runInsights(config: InsightsRunConfig, onStream?: Insights
     try {
       const handle = startClaudeProcess({
         command,
+        engine,
         args: buildInsightsArgs(toClaudeModel(config.model), toClaudeEffort(config.thinkingLevel), systemPromptFile, !!graphify, mcpConfigFile),
         cwd: projectDir,
         env,

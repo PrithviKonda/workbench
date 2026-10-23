@@ -52,6 +52,7 @@ const probe: WslProbeResult = {
   networkingMode: 'nat',
   tools: {
     claude: { path: '/home/me/.local/bin/claude', version: '2.1.0' },
+    codex: { path: null, version: null },
     git: { path: '/usr/bin/git', version: '2.43.0' },
     gh: { path: null, version: null },
     glab: { path: null, version: null },

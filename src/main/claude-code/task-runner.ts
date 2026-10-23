@@ -24,7 +24,10 @@ import { randomUUID } from 'crypto';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'fs';
 import os from 'os';
 import path from 'path';
-import { resolveClaudeEnv } from './env';
+import { pickEngine, resolveClaudeEnv } from './env';
+import { CODEX_TASK_LIST_SERVER, codexModelFor, codexTaskListTools, readCodexModels } from './codex';
+import { defaultCodexHome, findCodexRollout, getBestCodexAccount } from '../claude-profile/codex-accounts';
+import { openToolsSession } from '../insights/task-tools-server';
 import { startClaudeProcess, type ClaudeProcessHandle } from './process';
 import { buildMcpConfig } from './mcp-config';
 import { triageTask, fixedTriage, applyPlanningPolicy } from './triage';
@@ -432,7 +435,7 @@ export class ClaudeTaskRun {
   /** Run a Claude Code session step; returns an outcome when the run must stop */
   private async runSessionPhase(name: Exclude<ClaudeRunPhaseName, 'triage'>): Promise<TaskRunOutcome | null> {
     const triage = this.info.triage ?? fixedTriage(this.config.settings, this.config.title, 'fallback', 'No triage recorded');
-    const model = name === 'plan' ? (triage.model === 'fable' ? 'fable' : 'opus') : triage.model;
+    let model: string = name === 'plan' ? (triage.model === 'fable' ? 'fable' : 'opus') : triage.model;
     const effort: ClaudeEffort = name === 'plan' && (triage.effort === 'low' || triage.effort === 'medium') ? 'high' : triage.effort;
     const logPhase: TaskLogPhase = name === 'plan' ? 'planning' : name === 'validate' ? 'validation' : 'coding';
 
@@ -446,6 +449,22 @@ export class ClaudeTaskRun {
     if (this.info.runtime !== runtime) {
       this.info.runtime = runtime;
       this.saveInfo();
+    }
+    // Same for the agent CLI: a Claude Code session can't continue in Codex or the other way round
+    const engine = await pickEngine(this.config.profileId ?? this.info.profileId);
+    if (this.info.sessionId && (this.info.engine ?? 'claude') !== engine) {
+      this.emitLog(`This step runs in ${engine === 'codex' ? 'Codex' : 'Claude Code'}, so it starts a new session`);
+      this.info.sessionId = undefined;
+      this.info.profileId = undefined;
+    }
+    if ((this.info.engine ?? 'claude') !== engine) {
+      this.info.engine = engine;
+      this.saveInfo();
+    }
+    // Codex: the tier triage picked as the Codex model it maps to, so logs and costs name the real model
+    if (engine === 'codex') {
+      const home = getBestCodexAccount({ pinnedId: this.config.profileId ?? this.info.profileId })?.configDir ?? defaultCodexHome();
+      model = codexModelFor(model, readCodexModels(home)) ?? model;
     }
 
     const resumeSessionId = this.info.sessionId;
@@ -477,7 +496,8 @@ export class ClaudeTaskRun {
       permissionMode: name === 'plan' ? 'plan' : this.config.isolated === false ? 'auto' : 'bypassPermissions',
       sessionId,
     });
-    if (!this.info.sessionId) this.info.sessionId = sessionId;
+    // Codex names its thread itself (the init message brings the id); a made-up id couldn't be resumed
+    if (!this.info.sessionId && engine !== 'codex') this.info.sessionId = sessionId;
     this.saveInfo();
 
     const outcome = await this.runClaude({
@@ -498,7 +518,9 @@ export class ClaudeTaskRun {
     }
     if (outcome.rateLimit) return this.rateLimited(name, phase, outcome.rateLimit);
     if (outcome.authFailed) {
-      const error = 'Claude Code is not signed in or the sign-in expired. Re-authenticate the account in Settings > Accounts.';
+      const error = engine === 'codex'
+        ? 'Codex is not signed in or the sign-in expired. Sign in to the ChatGPT account again in Settings > Accounts.'
+        : 'Claude Code is not signed in or the sign-in expired. Re-authenticate the account in Settings > Accounts.';
       this.endPhase(phase, { isError: true, error });
       this.log.endPhase(logPhase, false, error);
       this.failEvent(name, error);
@@ -599,7 +621,7 @@ Implement this task. Verify it with ${verificationHint(triage)}, then commit the
       case 'validate':
         text = `${resume ? '' : `${taskBlock(this.config)}\n\n`}Before handing this off, validate the work:
 1. Run ${verificationHint(triage)}. Fix failures your change caused.
-2. Review the full change against \`${this.config.baseBranch}\` (\`git diff ${this.config.baseBranch}...HEAD\` plus any uncommitted changes) with fresh eyes. Use the /code-review skill if it's available; otherwise use a subagent that sees only the diff and the task. Fix only findings that affect correctness or the task's requirements; don't gold-plate.
+2. Review the full change against \`${this.config.baseBranch}\` (\`git diff ${this.config.baseBranch}...HEAD\` plus any uncommitted changes) with fresh eyes. Use the /code-review skill if it's available; otherwise use a subagent that sees only the diff and the task, or if you have neither, review the diff yourself as a skeptical reviewer who didn't write it. Fix only findings that affect correctness or the task's requirements; don't gold-plate.
 3. Commit any remaining changes.
 Then return the report: status "passed" when the change works and the checks pass, "partial" when some checks couldn't run, "failed" when something is still broken.`;
         break;
@@ -658,7 +680,7 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
     const { settings } = this.config;
     // Stay on the profile that holds the session transcript, unless the caller switched profiles
     // (rate-limit swap); then the transcript is copied to the new profile below
-    const { command, env, profileId } = await resolveClaudeEnv({
+    const { command, env, profileId, engine } = await resolveClaudeEnv({
       profileId: this.config.profileId ?? (params.resume ? this.info.profileId : undefined),
       extraEnv: {
         ...(this.config.extraEnv ?? {}),
@@ -669,9 +691,15 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
     });
 
     // Host path of the config dir (the transcript is copied with Windows file APIs, also in WSL)
-    const configDir = env.CLAUDE_CONFIG_DIR ? toHostPath(env.CLAUDE_CONFIG_DIR) : defaultClaudeConfigDir();
+    const configDir = engine === 'codex'
+      ? env.CODEX_HOME || defaultCodexHome()
+      : env.CLAUDE_CONFIG_DIR ? toHostPath(env.CLAUDE_CONFIG_DIR) : defaultClaudeConfigDir();
     if (params.resume && this.info.configDir && this.info.configDir !== configDir) {
-      copySessionTranscript(params.sessionId, this.info.configDir, configDir);
+      if (engine === 'codex') {
+        copyCodexRollout(params.sessionId, this.info.configDir, configDir);
+      } else {
+        copySessionTranscript(params.sessionId, this.info.configDir, configDir);
+      }
     }
     if (this.info.profileId !== profileId || this.info.configDir !== configDir) {
       this.info.profileId = profileId;
@@ -711,6 +739,10 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
     if (this.config.maxBudgetUsd && this.config.maxBudgetUsd > 0) args.push('--max-budget-usd', String(this.config.maxBudgetUsd));
     if (settings.fallbackModel?.trim()) args.push('--fallback-model', settings.fallbackModel.trim());
     const mcpConfig = buildMcpConfig(this.config.connectorIds, this.config.connectorSettings);
+    // Codex has no task list in headless runs: Workbench serves TaskCreate/TaskUpdate for this phase
+    const taskList = engine === 'codex' ? codexTaskListTools() : null;
+    const taskListSession = taskList ? await openToolsSession(taskList.tools, taskList.call) : null;
+    if (taskListSession) mcpConfig.mcpServers[CODEX_TASK_LIST_SERVER] = taskListSession.mcpServer;
     if (Object.keys(mcpConfig.mcpServers).length > 0) args.push('--mcp-config', JSON.stringify(mcpConfig));
 
     this.rejectedRateLimitResetAt = undefined;
@@ -719,6 +751,7 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
 
     this.current = startClaudeProcess({
       command,
+      engine,
       args,
       cwd: this.config.worktreePath,
       env,
@@ -726,7 +759,7 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
       abortSignal: this.abortController.signal,
       onMessage: (message) => {
         const signal = this.handleMessage(message, params.logPhase);
-        if (signal === 'rate_limit' && !rateLimit) rateLimit = { message: 'Claude usage limit reached' };
+        if (signal === 'rate_limit' && !rateLimit) rateLimit = { message: engine === 'codex' ? 'ChatGPT usage limit reached' : 'Claude usage limit reached' };
         if (signal === 'auth') authFailed = true;
       },
       onStderr: (chunk) => {
@@ -736,6 +769,7 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
     });
     const outcome = await this.current.done;
     this.current = null;
+    taskListSession?.close();
 
     if (this.stopped || outcome.aborted) return { stopped: true };
 
@@ -954,7 +988,9 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
 
   private endPhase(phase: ClaudeRunPhase, fields: Partial<ClaudeRunPhase>, result?: ClaudeResultMessage): void {
     let costUsd = phase.costUsd;
-    if (result?.total_cost_usd !== undefined) {
+    if (result?.total_cost_usd !== undefined && result.cost_scope === 'run') {
+      costUsd = result.total_cost_usd;
+    } else if (result?.total_cost_usd !== undefined) {
       // A resumed session reports its cumulative cost: this phase's share is the difference
       const earlier = this.info.phases
         .filter((p) => p !== phase && p.name !== 'triage' && p.sessionId === (result.session_id ?? phase.sessionId))
@@ -1097,6 +1133,19 @@ function copySessionTranscript(sessionId: string, fromConfigDir: string, toConfi
     }
   } catch (error) {
     console.warn('[ClaudeTaskRun] Could not copy the session transcript to the new profile:', error);
+  }
+}
+
+/** Copy a Codex thread's session file to another account's CODEX_HOME, so the thread resumes there */
+function copyCodexRollout(threadId: string, fromHome: string, toHome: string): void {
+  try {
+    const source = findCodexRollout(fromHome, threadId);
+    if (!source) return;
+    const target = path.join(toHome, path.relative(fromHome, source));
+    mkdirSync(path.dirname(target), { recursive: true });
+    copyFileSync(source, target);
+  } catch (error) {
+    console.warn('[ClaudeTaskRun] Could not copy the Codex session to the new account:', error);
   }
 }
 

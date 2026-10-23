@@ -102,6 +102,8 @@ export interface ClaudeUsageSnapshot {
 export interface ProfileUsageSummary {
   /** Profile ID */
   profileId: string;
+  /** Agent CLI of the account (missing: Claude Code) */
+  provider?: 'claude' | 'codex';
   /** Profile name for display */
   profileName: string;
   /** Email address (from Keychain or profile) */
@@ -166,6 +168,8 @@ export interface ClaudeRateLimitEvent {
 export interface ClaudeProfile {
   id: string;
   name: string;
+  /** Agent CLI the account signs in to (missing: Claude Code). Codex accounts keep CODEX_HOME in configDir */
+  provider?: 'claude' | 'codex';
   /**
    * OAuth token (sk-ant-oat01-...) for this profile.
    * When set, CLAUDE_CODE_OAUTH_TOKEN env var is used instead of config dir.
@@ -254,6 +258,14 @@ export interface DetectedClaudeCodeAccount {
   plan?: string;
   /** Settings and variables that configure it (effective first) */
   values: DetectedClaudeCodeValue[];
+}
+
+/** ChatGPT/OpenAI (Codex) accounts for Settings > Accounts */
+export interface CodexAccountsInfo {
+  accounts: ClaudeProfile[];
+  usage: ProfileUsageSummary[];
+  /** Codex CLI found on this machine */
+  cliFound: boolean;
 }
 
 /**

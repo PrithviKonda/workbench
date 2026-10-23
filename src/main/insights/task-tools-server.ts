@@ -32,7 +32,20 @@ export interface TaskToolsSession {
   close: () => void;
 }
 
-const sessions = new Map<string, TaskToolContext>();
+/** A tool the server lists, with how to run it */
+export interface ServedTool {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  mutates?: boolean;
+}
+
+interface ToolSession {
+  tools: readonly ServedTool[];
+  call: (name: string, args: Record<string, unknown>) => Promise<unknown>;
+}
+
+const sessions = new Map<string, ToolSession>();
 let server: Server | null = null;
 let listening: Promise<number> | null = null;
 
@@ -45,7 +58,7 @@ function rpcError(id: JsonRpcRequest['id'], code: number, message: string) {
 }
 
 /** Answer one JSON-RPC message; notifications get no answer */
-async function handleMessage(context: TaskToolContext, message: JsonRpcRequest): Promise<unknown | undefined> {
+async function handleMessage(session: ToolSession, message: JsonRpcRequest): Promise<unknown | undefined> {
   const isNotification = message.id === undefined;
   switch (message.method) {
     case 'initialize': {
@@ -61,7 +74,7 @@ async function handleMessage(context: TaskToolContext, message: JsonRpcRequest):
       return rpcResult(message.id, {});
     case 'tools/list':
       return rpcResult(message.id, {
-        tools: TASK_TOOLS.map(({ name, description, inputSchema, mutates }) => ({
+        tools: session.tools.map(({ name, description, inputSchema, mutates }) => ({
           name,
           description,
           inputSchema,
@@ -72,8 +85,9 @@ async function handleMessage(context: TaskToolContext, message: JsonRpcRequest):
       const name = String(message.params?.name ?? '');
       const args = (message.params?.arguments ?? {}) as Record<string, unknown>;
       try {
-        const result = await runTaskTool(context, name, args);
-        return rpcResult(message.id, { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] });
+        const result = await session.call(name, args);
+        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        return rpcResult(message.id, { content: [{ type: 'text', text }] });
       } catch (error) {
         const text = error instanceof Error ? error.message : String(error);
         return rpcResult(message.id, { content: [{ type: 'text', text }], isError: true });
@@ -112,8 +126,8 @@ function send(response: ServerResponse, status: number, body?: unknown): void {
 
 async function handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
   const token = /^Bearer (.+)$/.exec(request.headers.authorization ?? '')?.[1];
-  const context = token ? sessions.get(token) : undefined;
-  if (!context) return send(response, 401, rpcError(null, -32001, 'Unauthorized'));
+  const session = token ? sessions.get(token) : undefined;
+  if (!session) return send(response, 401, rpcError(null, -32001, 'Unauthorized'));
   // Only JSON-RPC over POST: no server-initiated stream
   if (request.method !== 'POST') return send(response, 405);
 
@@ -124,7 +138,7 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
     return send(response, 400, rpcError(null, -32700, 'Parse error'));
   }
   const messages = Array.isArray(payload) ? payload : [payload];
-  const answers = (await Promise.all(messages.map((message) => handleMessage(context, message)))).filter((answer) => answer !== undefined);
+  const answers = (await Promise.all(messages.map((message) => handleMessage(session, message)))).filter((answer) => answer !== undefined);
   if (answers.length === 0) return send(response, 202);
   send(response, 200, Array.isArray(payload) ? answers : answers[0]);
 }
@@ -148,10 +162,15 @@ function ensureServer(): Promise<number> {
 }
 
 /** Open the task tools for one chat turn of a project */
-export async function openTaskToolsSession(context: TaskToolContext): Promise<TaskToolsSession> {
+export function openTaskToolsSession(context: TaskToolContext): Promise<TaskToolsSession> {
+  return openToolsSession(TASK_TOOLS, (name, args) => runTaskTool(context, name, args));
+}
+
+/** Serve any set of tools to one run, under its own token */
+export async function openToolsSession(tools: readonly ServedTool[], call: ToolSession['call']): Promise<TaskToolsSession> {
   const port = await ensureServer();
   const token = randomBytes(24).toString('hex');
-  sessions.set(token, context);
+  sessions.set(token, { tools, call });
   return {
     mcpServer: { type: 'http', url: `http://127.0.0.1:${port}/mcp`, headers: { Authorization: `Bearer ${token}` } },
     close: () => {

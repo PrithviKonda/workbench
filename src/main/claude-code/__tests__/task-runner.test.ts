@@ -12,6 +12,7 @@ vi.mock('../env', () => ({
     command: 'claude',
     env: { ...(options?.extraEnv ?? {}) },
   })),
+  pickEngine: vi.fn(async () => 'claude'),
 }));
 
 /** Scripted Claude Code runs: one entry per spawned process */

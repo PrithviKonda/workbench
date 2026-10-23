@@ -154,6 +154,8 @@ export interface ClaudeRunInfo {
    * change of runtime starts a new session.
    */
   runtime?: ClaudeRuntime;
+  /** Agent CLI the session runs in (unset = Claude Code); a session can't move to the other one */
+  engine?: 'claude' | 'codex';
   triage?: TaskTriage;
   /** Approved plan (Markdown), when the task was planned */
   plan?: string;

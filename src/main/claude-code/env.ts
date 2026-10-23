@@ -20,6 +20,19 @@ import { getAPIProfileEnv } from '../services/profile';
 import { isWindows } from '../platform';
 import { getWslInfo, whenShellRuntimeReady } from '../platform/shell-runtime';
 import { withClaudeConfigDir } from '../claude-profile/config-dir-paths';
+import { getAugmentedEnvAsync } from '../env-utils';
+import { readSettingsFileAsync } from '../settings-utils';
+import { getClaudeProfileManager } from '../claude-profile-manager';
+import {
+  getBestCodexAccount,
+  hasSignedInCodexAccount,
+  isCodexAccountId,
+  markCodexAccountUsed,
+} from '../claude-profile/codex-accounts';
+import type { AiEngine } from '../../shared/types/settings';
+
+/** Agent CLI of a run */
+export type EngineKind = 'claude' | 'codex';
 
 /** Variables that would make Claude Code use an API key instead of the profile's sign-in */
 const API_AUTH_VARS = [
@@ -33,16 +46,18 @@ const API_AUTH_VARS = [
 ] as const;
 
 export interface ClaudeEnvResult {
-  /** Path or command for the `claude` executable */
+  /** Path or command for the `claude` (or `codex`) executable */
   command: string;
   env: Record<string, string>;
+  /** Which CLI `command` is (missing: claude); startClaudeProcess translates Claude Code arguments for Codex */
+  engine?: EngineKind;
   /** Claude profile the run uses (undefined for API profiles) */
   profileId?: string;
   profileName?: string;
 }
 
 export interface ClaudeEnvOptions {
-  /** Use this Claude profile instead of picking the best available one */
+  /** Use this Claude profile (or Codex account) instead of picking the best available one */
   profileId?: string;
   /** Extra variables (applied before credentials, so they cannot override auth) */
   extraEnv?: Record<string, string>;
@@ -68,6 +83,7 @@ function deriveGitBashPath(gitExePath: string): string | null {
 export async function resolveClaudeEnv(options: ClaudeEnvOptions = {}): Promise<ClaudeEnvResult> {
   // Runs spawned right after startup must know whether Claude Code runs in WSL
   await whenShellRuntimeReady();
+  if ((await pickEngine(options.profileId)) === 'codex') return resolveCodexEnv(options);
   const wsl = getWslInfo();
 
   // In WSL: the distribution's own claude, and the app's environment as it is (PATH and other
@@ -91,7 +107,7 @@ export async function resolveClaudeEnv(options: ClaudeEnvOptions = {}): Promise<
   if (Object.keys(apiProfileEnv).length > 0) {
     for (const name of API_AUTH_VARS) delete env[name];
     delete env.CLAUDE_CODE_OAUTH_TOKEN;
-    return { command, env: { ...env, ...apiProfileEnv } };
+    return { command, env: { ...env, ...apiProfileEnv }, engine: 'claude' };
   }
 
   let profileEnv: Record<string, string>;
@@ -121,5 +137,53 @@ export async function resolveClaudeEnv(options: ClaudeEnvOptions = {}): Promise<
     delete merged.CLAUDE_CODE_OAUTH_TOKEN;
   }
   // Claude Code's default ~/.claude runs without CLAUDE_CONFIG_DIR
-  return { command, env: withClaudeConfigDir(merged), profileId, profileName };
+  return { command, env: withClaudeConfigDir(merged), profileId, profileName, engine: 'claude' };
+}
+
+/** Whether Claude Code has something to run with: a signed-in account or an API profile */
+async function claudeCanRun(): Promise<boolean> {
+  try {
+    if (getClaudeProfileManager().getSettings().profiles.some((p) => p.isAuthenticated)) return true;
+  } catch {
+    // Profile manager not ready
+  }
+  try {
+    return Object.keys(await getAPIProfileEnv()).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Engine for a run: a pinned account decides (a session stays with the CLI it started in), then
+ * Settings > Agents. "Auto" runs Claude Code when it can sign in, otherwise Codex when a
+ * ChatGPT/OpenAI account is signed in, so either kind of account just works.
+ */
+export async function pickEngine(profileId?: string): Promise<EngineKind> {
+  if (profileId) return isCodexAccountId(profileId) ? 'codex' : 'claude';
+  const setting = ((await readSettingsFileAsync())?.aiEngine as AiEngine | undefined) ?? 'auto';
+  if (setting !== 'auto') return setting;
+  if (await claudeCanRun()) return 'claude';
+  return hasSignedInCodexAccount() ? 'codex' : 'claude';
+}
+
+/** The `codex` command and the environment of the best available Codex account */
+async function resolveCodexEnv(options: ClaudeEnvOptions): Promise<ClaudeEnvResult> {
+  const wsl = getWslInfo();
+  const info = await getToolInfoAsync('codex', { refreshIfMissing: true });
+  const command = wsl ? wsl.tools.codex.path ?? 'codex' : info.path ?? 'codex';
+  const env: Record<string, string> = { ...(wsl ? process.env as Record<string, string> : await getAugmentedEnvAsync()), ...(options.extraEnv ?? {}) };
+  // ponytail: in WSL, Codex uses the distribution's own ~/.codex (accounts are found on the host only)
+  if (wsl) return { command, env, engine: 'codex' };
+
+  let autoSwitch;
+  try {
+    autoSwitch = getClaudeProfileManager().getAutoSwitchSettings();
+  } catch {
+    autoSwitch = undefined;
+  }
+  const account = getBestCodexAccount({ pinnedId: options.profileId, autoSwitch });
+  if (!account?.configDir) return { command, env, engine: 'codex' };
+  markCodexAccountUsed(account.id);
+  return { command, env: { ...env, CODEX_HOME: account.configDir }, profileId: account.id, profileName: account.name, engine: 'codex' };
 }

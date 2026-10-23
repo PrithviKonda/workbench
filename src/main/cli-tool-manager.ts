@@ -58,7 +58,7 @@ import {
 /**
  * Supported CLI tools managed by this system
  */
-export type CLITool = 'python' | 'git' | 'gh' | 'glab' | 'claude';
+export type CLITool = 'python' | 'git' | 'gh' | 'glab' | 'claude' | 'codex';
 
 /**
  * User configuration for CLI tool paths
@@ -70,6 +70,7 @@ export interface ToolConfig {
   githubCLIPath?: string;
   gitlabCLIPath?: string;
   claudePath?: string;
+  codexPath?: string;
   /** Linux paths used instead of the ones above while the app runs its tools in WSL */
   wslToolPaths?: WslToolPaths;
 }
@@ -81,6 +82,7 @@ const WSL_TOOL_NAMES: Record<CLITool, WslProbeTool> = {
   gh: 'gh',
   glab: 'glab',
   claude: 'claude',
+  codex: 'codex',
 };
 
 const TOOL_LABELS: Record<CLITool, string> = {
@@ -89,6 +91,7 @@ const TOOL_LABELS: Record<CLITool, string> = {
   gh: 'GitHub CLI',
   glab: 'GitLab CLI',
   claude: 'Claude CLI',
+  codex: 'Codex CLI',
 };
 
 const PYTHON_MINIMUM_VERSION = '3.10.0';
@@ -401,7 +404,7 @@ class CLIToolManager {
 
   /** The user's WSL path for a tool, when it is a usable Linux path */
   private wslUserPath(tool: CLITool): string | undefined {
-    const configured = this.userConfig.wslToolPaths?.[tool]?.trim();
+    const configured = tool === 'codex' ? undefined : this.userConfig.wslToolPaths?.[tool]?.trim();
     if (!configured) return undefined;
     if (!isWslToolPath(configured)) {
       console.warn(`[CLI Tools] User-configured WSL path for ${tool} is not a Linux path, ignoring: ${configured}`);
@@ -592,6 +595,8 @@ class CLIToolManager {
         return this.detectGitLabCLI();
       case 'claude':
         return this.detectClaude();
+      case 'codex':
+        return this.detectCodex();
       default:
         return {
           found: false,
@@ -1462,6 +1467,8 @@ class CLIToolManager {
         return this.detectGitHubCLIAsync();
       case 'glab':
         return this.detectGitLabCLIAsync();
+      case 'codex':
+        return this.detectCodexAsync();
       default:
         return {
           found: false,
@@ -2120,6 +2127,53 @@ class CLIToolManager {
       source: 'fallback',
       message: 'GitHub CLI (gh) not found. Install from https://cli.github.com',
     };
+  }
+
+  /** Where OpenAI's Codex CLI may be: the user's path, Homebrew, then PATH (npm's global bin included) */
+  private codexCandidates(): string[] {
+    const candidates: string[] = [];
+    if (this.userConfig.codexPath && !isWrongPlatformPath(this.userConfig.codexPath)) candidates.push(this.userConfig.codexPath);
+    if (isMacOS()) candidates.push('/opt/homebrew/bin/codex', '/usr/local/bin/codex');
+    return candidates;
+  }
+
+  private codexFound(codexPath: string, source: ToolDetectionResult['source'], version?: string): ToolDetectionResult {
+    return { found: true, path: codexPath, version, source, message: `Using Codex CLI: ${codexPath}` };
+  }
+
+  /** Detect OpenAI's Codex CLI (sync) */
+  private detectCodex(): ToolDetectionResult {
+    for (const candidate of this.codexCandidates()) {
+      if (existsSync(candidate)) return this.codexFound(candidate, candidate === this.userConfig.codexPath ? 'user-config' : 'homebrew');
+    }
+    const onPath = findExecutable('codex');
+    if (onPath) return this.codexFound(onPath, 'system-path');
+    return { found: false, source: 'fallback', message: 'Codex CLI not found. Install it with: npm install -g @openai/codex' };
+  }
+
+  /** Detect OpenAI's Codex CLI (async), with its version */
+  private async detectCodexAsync(): Promise<ToolDetectionResult> {
+    let found: ToolDetectionResult | null = null;
+    for (const candidate of this.codexCandidates()) {
+      if (await existsAsync(candidate)) {
+        found = this.codexFound(candidate, candidate === this.userConfig.codexPath ? 'user-config' : 'homebrew');
+        break;
+      }
+    }
+    if (!found) {
+      const onPath = await findExecutableAsync('codex');
+      if (onPath) found = this.codexFound(onPath, 'system-path');
+    }
+    if (!found?.path) return { found: false, source: 'fallback', message: 'Codex CLI not found. Install it with: npm install -g @openai/codex' };
+    if (!shouldUseShell(found.path)) {
+      try {
+        const { stdout } = await execFileAsync(found.path, ['--version'], { encoding: 'utf-8', timeout: 5000, windowsHide: true, env: await getAugmentedEnvAsync() });
+        found.version = /(\d+\.\d+\.\d+)/.exec(stdout)?.[1];
+      } catch {
+        // Found but `--version` failed: still usable, version unknown
+      }
+    }
+    return found;
   }
 
   /**

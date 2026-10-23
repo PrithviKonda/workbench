@@ -8,7 +8,7 @@
  * the usage chart needs. The totals Claude Code writes stay authoritative: `session-spending.ts`
  * prices the turns to divide a session's spending over the days, not to replace that figure.
  *
- * Prices are per million tokens, as published for the Claude API. A cached write costs 1.25x the
+ * Prices are per million tokens, as published for the Claude API (and the OpenAI API for Codex runs). A cached write costs 1.25x the
  * input price for the five minute cache and 2x for the one hour cache, and a cached read a tenth of
  * it (the newer models have their own read price). A model that is not listed is priced at nothing,
  * so an unknown model shows up as whatever Claude Code itself reported for the session.
@@ -46,6 +46,18 @@ const PRICES: Array<[string, ModelPrice]> = (
     ['claude-sonnet-4-6', price(3, 15, 0.3)],
     ['claude-haiku-5-5', price(0.1, 0.5, 0.01)],
     ['claude-haiku-4-5', price(1, 5, 0.1)],
+    // OpenAI models Codex runs (standard tier, up to 272K input tokens); OpenAI doesn't charge cache writes
+    ['gpt-6.1-sol', price(2, 10, 0.1)],
+    ['gpt-6-astra', price(10, 50, 1)],
+    ['gpt-6-sol', price(2, 10, 0.2)],
+    ['gpt-6-luna', price(0.1, 0.5, 0.01)],
+    ['gpt-5.6-sol', price(4, 20, 0.4)],
+    ['gpt-5.6-terra', price(2, 12, 0.2)],
+    ['gpt-5.6-luna', price(0.2, 1.2, 0.02)],
+    ['gpt-5.5', price(5, 30, 0.5)],
+    ['gpt-5.4-mini', price(0.75, 4.5, 0.075)],
+    ['gpt-5.4', price(2.5, 15, 0.25)],
+    ['gpt-5', price(1.25, 10, 0.125)],
   ] as Array<[string, ModelPrice]>
 ).sort(([a], [b]) => b.length - a.length);
 

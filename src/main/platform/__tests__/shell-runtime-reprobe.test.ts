@@ -30,6 +30,7 @@ const probe = (graphify: string | null): WslProbeResult => ({
   networkingMode: 'nat',
   tools: {
     claude: tool(null), git: tool('/usr/bin/git', '2.43.0'), gh: tool(null), glab: tool(null),
+    codex: { path: null, version: null },
     python3: tool(null), node: tool(null), npx: tool(null), graphify: tool(graphify),
   },
 });

@@ -103,6 +103,8 @@ export interface ClaudeResultMessage {
   structured_output?: unknown;
   errors?: string[];
   total_cost_usd?: number;
+  /** 'run': total_cost_usd is this run's cost only, not the session's running total (Codex runs) */
+  cost_scope?: 'run';
   duration_ms?: number;
   num_turns?: number;
   api_error_status?: number | null;

@@ -23,7 +23,7 @@ const LIST_TIMEOUT_MS = 15_000;
 const PROBE_TIMEOUT_MS = 60_000;
 
 /** Tools looked up inside the distribution */
-export const WSL_PROBE_TOOLS = ['claude', 'git', 'gh', 'glab', 'python3', 'node', 'npx', 'graphify'] as const;
+export const WSL_PROBE_TOOLS = ['claude', 'codex', 'git', 'gh', 'glab', 'python3', 'node', 'npx', 'graphify'] as const;
 export type WslProbeTool = (typeof WSL_PROBE_TOOLS)[number];
 
 export interface WslToolProbe {

@@ -10,10 +10,16 @@
 import type { ChildProcess } from 'child_process';
 import { killRuntimeProcess, spawnTool } from '../platform/runtime-exec';
 import type { ClaudeResultMessage, ClaudeStreamMessage, ClaudeUserContentBlock } from './stream-types';
+import { createCodexTranslator, toCodexInvocation, type CodexTranslator } from './codex';
+import { readCodexRateLimits, readCodexThreadUsage, defaultCodexHome } from '../claude-profile/codex-accounts';
+import type { EngineKind } from './env';
 
 export interface ClaudeProcessOptions {
   command: string;
+  /** Claude Code arguments (translated to `codex exec` when `engine` is codex) */
   args: string[];
+  /** CLI that `command` runs (from resolveClaudeEnv; default claude) */
+  engine?: EngineKind;
   cwd: string;
   env: Record<string, string>;
   /**
@@ -51,10 +57,37 @@ export interface ClaudeProcessHandle {
 
 /** Spawn the Claude Code CLI and collect its output */
 export function startClaudeProcess(options: ClaudeProcessOptions): ClaudeProcessHandle {
-  const child = spawnTool('claude', options.args, {
+  // Codex: same arguments and messages for the callers, translated both ways (codex.ts)
+  let codex: { translator: CodexTranslator; cleanup: () => void; stdin: string } | null = null;
+  let args = options.args;
+  let env = options.env;
+  if (options.engine === 'codex') {
+    const codexHome = options.env.CODEX_HOME || defaultCodexHome();
+    const invocation = toCodexInvocation(options.args, options.input, codexHome);
+    const resumeIndex = options.args.indexOf('--resume');
+    const resumeId = resumeIndex === -1 ? undefined : options.args[resumeIndex + 1];
+    args = invocation.args;
+    env = { ...options.env, ...invocation.env };
+    codex = {
+      stdin: invocation.stdin,
+      cleanup: invocation.cleanup,
+      translator: createCodexTranslator({
+        model: invocation.model,
+        partial: invocation.partial,
+        structured: invocation.structured,
+        cwd: options.cwd,
+        baselineUsage: resumeId ? readCodexThreadUsage(codexHome, resumeId) : null,
+        resetAt: () => {
+          const limits = readCodexRateLimits(codexHome);
+          return limits?.sessionPercent !== undefined && limits.sessionPercent >= 100 ? limits.sessionResetAt : limits?.weeklyResetAt ?? limits?.sessionResetAt;
+        },
+      }),
+    };
+  }
+  const child = spawnTool(options.engine ?? 'claude', args, {
     command: options.command,
     cwd: options.cwd,
-    env: options.env,
+    env,
     windowsHide: true,
     stdio: 'pipe',
   });
@@ -72,6 +105,15 @@ export function startClaudeProcess(options: ClaudeProcessOptions): ClaudeProcess
     let result: ClaudeResultMessage | undefined;
     let timer: NodeJS.Timeout | undefined;
 
+    const deliver = (message: ClaudeStreamMessage) => {
+      if (message.type === 'result') result = message as ClaudeResultMessage;
+      try {
+        options.onMessage?.(message);
+      } catch (error) {
+        console.error('[ClaudeCode] onMessage handler failed:', error);
+      }
+    };
+
     const handleLine = (line: string) => {
       const trimmed = line.trim();
       if (!trimmed || trimmed[0] !== '{') return;
@@ -81,11 +123,10 @@ export function startClaudeProcess(options: ClaudeProcessOptions): ClaudeProcess
       } catch {
         return; // Not JSON (CLI warning)
       }
-      if (message.type === 'result') result = message as ClaudeResultMessage;
-      try {
-        options.onMessage?.(message);
-      } catch (error) {
-        console.error('[ClaudeCode] onMessage handler failed:', error);
+      if (codex) {
+        for (const translated of codex.translator.translate(message as Parameters<CodexTranslator['translate']>[0])) deliver(translated);
+      } else {
+        deliver(message);
       }
     };
 
@@ -122,6 +163,10 @@ export function startClaudeProcess(options: ClaudeProcessOptions): ClaudeProcess
       options.abortSignal?.removeEventListener('abort', onAbort);
       if (stdoutBuffer.trim()) handleLine(stdoutBuffer);
       stdoutBuffer = '';
+      if (codex) {
+        for (const translated of codex.translator.finish(stderr)) deliver(translated);
+        codex.cleanup();
+      }
       resolve({ exitCode, signal, result, stderr, aborted, timedOut });
     };
     child.on('error', (error) => {
@@ -131,7 +176,9 @@ export function startClaudeProcess(options: ClaudeProcessOptions): ClaudeProcess
     child.on('close', (code, signal) => finish(code, signal));
 
     // Send the prompt and close stdin so the run starts
-    const input = typeof options.input === 'string'
+    const input = codex
+      ? codex.stdin
+      : typeof options.input === 'string'
       ? options.input
       : `${JSON.stringify({ type: 'user', message: { role: 'user', content: options.input } })}\n`;
     child.stdin?.on('error', () => { /* process exited before reading stdin */ });

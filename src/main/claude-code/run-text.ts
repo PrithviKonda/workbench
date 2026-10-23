@@ -57,7 +57,7 @@ class ClaudeCodeRunError extends Error {
 
 /** Run Claude Code once and return its answer */
 export async function runClaudeText(options: RunClaudeTextOptions): Promise<RunClaudeTextResult> {
-  const { command, env } = await resolveClaudeEnv({ profileId: options.profileId });
+  const { command, env, engine } = await resolveClaudeEnv({ profileId: options.profileId });
   const tools = options.tools ?? [];
   const usesContentBlocks = typeof options.prompt !== 'string';
 
@@ -82,6 +82,7 @@ export async function runClaudeText(options: RunClaudeTextOptions): Promise<RunC
 
   const handle = startClaudeProcess({
     command,
+    engine,
     args,
     cwd: options.cwd ?? process.cwd(),
     env,

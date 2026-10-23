@@ -228,6 +228,9 @@ export type SupportedTerminal =
   // Custom option
   | 'custom';
 
+/** Agent CLI that does the AI work: Claude Code or OpenAI's Codex (ChatGPT) */
+export type AiEngine = 'auto' | 'claude' | 'codex';
+
 // CLI tools for AI-powered terminal sessions
 export type SupportedCLI =
   | 'claude-code'   // Claude Code CLI
@@ -290,6 +293,7 @@ export interface AppSettings {
   githubCLIPath?: string;
   gitlabCLIPath?: string;
   claudePath?: string;
+  codexPath?: string;
   autoBuildPath?: string;
   autoUpdateAutoBuild: boolean;
   // Maximum agent terminals per project (MIN_TERMINALS..MAX_TERMINALS_LIMIT)
@@ -309,6 +313,9 @@ export interface AppSettings {
   mcpConnectors?: McpConnectorSettings;
   // How tasks run in Claude Code: triage, planning, validation, budget (Settings > Claude Code)
   claudeCodeTasks?: Partial<ClaudeCodeTaskSettings>;
+  // Agent CLI for tasks, Insights, one-shot calls and agent windows (Settings > Agents; default auto:
+  // Claude Code when a Claude account is signed in, otherwise Codex with a ChatGPT/OpenAI account)
+  aiEngine?: AiEngine;
   // Log order setting for task detail view
   logOrder?: 'chronological' | 'reverse-chronological';
   // Beta updates opt-in (receive pre-release updates)

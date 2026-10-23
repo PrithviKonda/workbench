@@ -40,6 +40,7 @@ function toolConfigFromSettings(settings: Partial<AppSettings>): ToolConfig {
     githubCLIPath: settings.githubCLIPath,
     gitlabCLIPath: settings.gitlabCLIPath,
     claudePath: settings.claudePath,
+    codexPath: settings.codexPath,
     wslToolPaths: settings.wslToolPaths,
   };
 }
