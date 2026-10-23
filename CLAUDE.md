@@ -39,9 +39,16 @@ reviews, requests changes (same session continues) or merges.
 
 ## Critical Rules
 
-**Claude Code CLI only** — All AI work (tasks, triage, Insights, titles, PR text, commit messages, merge conflict help)
+**Agent CLIs only** — All AI work (tasks, triage, Insights, titles, PR text, commit messages, merge conflict help)
 runs through the locally installed Claude Code CLI via `src/main/claude-code/`. Use `ClaudeTaskRun` for tasks and
 `runClaudeText()` for one-shot calls; never call the Anthropic API or an AI SDK directly for these.
+
+**Codex engine** — The same calls can run on OpenAI's Codex CLI (ChatGPT or OpenAI API key), chosen by
+`AppSettings.aiEngine` (`auto` default: Claude Code when a Claude account can run, else Codex). `resolveClaudeEnv()`
+returns `engine`; `startClaudeProcess()` then translates the Claude Code arguments to `codex exec` and Codex's JSONL
+back into Claude Code stream messages (`claude-code/codex.ts`), so callers keep building Claude Code arguments. Codex
+accounts are CODEX_HOME folders (`claude-profile/codex-accounts.ts`, `ClaudeProfile.provider: 'codex'`, ids
+`codex:<folder>`) with usage from Codex's session files; a session never moves between engines (`ClaudeRunInfo.engine`).
 
 **i18n required** — All user-facing text uses `react-i18next` translation keys (see [i18n](#i18n)).
 
