@@ -29,6 +29,7 @@ import { cancelFallbackTimer } from '../agent-events-handlers';
 import { safeSendToRenderer } from '../utils';
 import { readSettingsFile } from '../../settings-utils';
 import { getAPIProfileEnv } from '../../services/profile';
+import { hasSignedInCodexAccount } from '../../claude-profile/codex-accounts';
 import { loadClaudeRunInfo } from '../../claude-code/task-runner';
 import { rateLimitResumeScheduler, type HeldTaskRef } from '../../services/rate-limit-resume-scheduler';
 import { clearRateLimitHold } from './rate-limit-hold';
@@ -44,7 +45,7 @@ import { XSTATE_ACTIVE_STATES } from '../../../shared/state-machines';
  */
 const pendingRestartFeedback = new Map<string, { feedback?: string; feedbackImagePaths?: string[] }>();
 
-const AUTH_REQUIRED_MESSAGE = 'Authentication required. Sign in to a Claude account or activate an API profile in Settings > Accounts before starting tasks.';
+const AUTH_REQUIRED_MESSAGE = 'Authentication required. Sign in to a Claude or ChatGPT (Codex) account, or activate an API profile, in Settings > Accounts before starting tasks.';
 
 /** Image types accepted for review feedback (defense in depth - frontend also validates) */
 const ALLOWED_IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/svg+xml'];
@@ -80,6 +81,10 @@ async function checkClaudeCodeAuth(): Promise<{ ok: true } | { ok: false; error:
     return { ok: false, error: initResult.error };
   }
   if (initResult.profileManager.hasValidAuth()) {
+    return { ok: true };
+  }
+  // Codex runs with a signed-in ChatGPT/OpenAI account
+  if (hasSignedInCodexAccount()) {
     return { ok: true };
   }
   try {

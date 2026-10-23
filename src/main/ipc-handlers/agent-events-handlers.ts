@@ -21,6 +21,8 @@ import { findTaskWorktree } from "../worktree-paths";
 import { findTaskAndProject } from "./task/shared";
 import { safeSendToRenderer } from "./utils";
 import { getClaudeProfileManager } from "../claude-profile-manager";
+import { getBestCodexAccount, getCodexAccount, isCodexAccountId } from "../claude-profile/codex-accounts";
+import { isProfileRateLimited } from "../claude-profile/rate-limit-manager";
 import { taskStateManager } from "../task-state-manager";
 import { parseRateLimitHold } from "../../shared/utils/rate-limit-hold";
 import { applyRateLimitHold } from "./task/rate-limit-hold";
@@ -59,7 +61,13 @@ function tryAutoSwapBeforeHold(
   if (!autoSwitch.enabled || !autoSwitch.autoSwitchOnRateLimit) {
     return false;
   }
-  const bestProfile = profileManager.getBestAvailableProfile(limitedProfileId);
+  // Stay with the CLI the session runs in: a Codex task moves to another Codex account
+  const codex = isCodexAccountId(limitedProfileId);
+  const candidate = codex
+    ? getBestCodexAccount({ excludeId: limitedProfileId, autoSwitch })
+    : profileManager.getBestAvailableProfile(limitedProfileId);
+  // Never swap onto an account that is limited too: holding until the reset is the better outcome
+  const bestProfile = candidate && !(codex && isProfileRateLimited(candidate).limited) ? candidate : null;
   if (!bestProfile) {
     return false;
   }
@@ -73,7 +81,7 @@ function tryAutoSwapBeforeHold(
     taskId,
     resetTime: typeof event.resetAt === "string" ? event.resetAt : undefined,
     profileId: limitedProfileId,
-    profileName: profileManager.getProfile(limitedProfileId)?.name,
+    profileName: codex ? getCodexAccount(limitedProfileId)?.name : profileManager.getProfile(limitedProfileId)?.name,
     detectedAt: new Date(),
     originalError: typeof event.message === "string" ? event.message : undefined,
     wasAutoSwapped: true,
@@ -148,7 +156,9 @@ export function registerAgenteventsHandlers(
 
     // Get profile name for display
     const profileManager = getClaudeProfileManager();
-    const profile = authFailure.profileId
+    const profile = isCodexAccountId(authFailure.profileId)
+      ? getCodexAccount(authFailure.profileId!) ?? { id: authFailure.profileId!, name: 'ChatGPT (Codex)' }
+      : authFailure.profileId
       ? profileManager.getProfile(authFailure.profileId)
       : profileManager.getActiveProfile();
 

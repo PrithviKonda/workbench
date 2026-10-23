@@ -21,6 +21,14 @@ import { reactiveTokenRefresh, ensureValidToken } from './token-refresh';
 import { isProfileRateLimited } from './rate-limit-manager';
 import { getOperationRegistry } from './operation-registry';
 import { usesClaudeSubscription } from './profile-utils';
+import { codexUsageSummaries, getBestCodexAccount, readCodexRateLimits } from './codex-accounts';
+import { pickEngine } from '../claude-code/env';
+
+/** Window length as the usage indicator labels it ('5-hour', '7-day') */
+function windowLabel(minutes: number | undefined, fallback: string): string {
+  if (!minutes) return fallback;
+  return minutes % 1440 === 0 ? `${minutes / 1440}-day` : minutes % 60 === 0 ? `${minutes / 60}-hour` : `${minutes}-minute`;
+}
 
 // Re-export for backward compatibility
 export type { ApiProvider };
@@ -425,7 +433,7 @@ export class UsageMonitor extends EventEmitter {
       }));
 
       // Return minimal data with auth status - don't return null!
-      return {
+      return this.withCodexAccounts({
         activeProfile: {
           profileId: activeProfileId || '',
           profileName: settings.profiles.find(p => p.id === activeProfileId)?.name || '',
@@ -436,7 +444,7 @@ export class UsageMonitor extends EventEmitter {
         },
         allProfiles,
         fetchedAt: new Date()
-      };
+      });
     }
 
     // Request coalescing: if a fetch is already in-flight, return the existing promise
@@ -445,12 +453,54 @@ export class UsageMonitor extends EventEmitter {
       return this.allProfilesUsageInflight;
     }
 
-    this.allProfilesUsageInflight = this._doGetAllProfilesUsage(forceRefresh);
+    this.allProfilesUsageInflight = this._doGetAllProfilesUsage(forceRefresh).then((usage) => usage && this.withCodexAccounts(usage));
     try {
       return await this.allProfilesUsageInflight;
     } finally {
       this.allProfilesUsageInflight = null;
     }
+  }
+
+  /** Codex accounts next to the Claude ones (their usage comes from Codex's own session files) */
+  private withCodexAccounts(usage: AllProfilesUsage): AllProfilesUsage {
+    const codex = codexUsageSummaries(usage.activeProfile.profileId);
+    if (codex.length === 0) return usage;
+    const allProfiles = [...usage.allProfiles.filter((p) => p.provider !== 'codex'), ...codex];
+    allProfiles.sort((a, b) => b.availabilityScore - a.availabilityScore);
+    return { ...usage, allProfiles };
+  }
+
+  /**
+   * When Codex is the engine, the usage indicator shows the Codex account runs use.
+   * Returns true when it did (the Claude check is skipped then: there may be no Claude account).
+   */
+  private async emitCodexUsage(): Promise<boolean> {
+    if ((await pickEngine()) !== 'codex') return false;
+    const account = getBestCodexAccount({ autoSwitch: getClaudeProfileManager().getAutoSwitchSettings() });
+    if (!account?.configDir) return false;
+    const limits = readCodexRateLimits(account.configDir);
+    const snapshot: ClaudeUsageSnapshot = {
+      sessionPercent: limits?.sessionPercent ?? 0,
+      weeklyPercent: limits?.weeklyPercent ?? 0,
+      sessionResetTimestamp: limits?.sessionResetAt?.toISOString(),
+      weeklyResetTimestamp: limits?.weeklyResetAt?.toISOString(),
+      profileId: account.id,
+      profileName: account.name,
+      profileEmail: account.email,
+      fetchedAt: new Date(),
+      usageWindows: {
+        sessionWindowLabel: windowLabel(limits?.sessionWindowMinutes, '5-hour'),
+        weeklyWindowLabel: windowLabel(limits?.weeklyWindowMinutes, '7-day'),
+      },
+    };
+    this.emit('usage-updated', snapshot);
+    const claude = this.currentUsage ? await this._doGetAllProfilesUsage(false).catch(() => null) : null;
+    this.emit('all-profiles-usage-updated', this.withCodexAccounts({
+      activeProfile: snapshot,
+      allProfiles: claude?.allProfiles ?? [],
+      fetchedAt: new Date(),
+    }));
+    return true;
   }
 
   private async _doGetAllProfilesUsage(
@@ -944,6 +994,8 @@ export class UsageMonitor extends EventEmitter {
     let isAPIProfile = false;
 
     try {
+      if (await this.emitCodexUsage()) return;
+
       // Step 1: Determine active profile (API vs OAuth)
       const activeProfile = await this.determineActiveProfile();
       if (!activeProfile) {

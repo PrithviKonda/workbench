@@ -22,6 +22,8 @@ import { getAugmentedEnvAsync } from '../env-utils';
 import { isWslRuntime } from '../platform/shell-runtime';
 import { git } from '../utils/git-exec';
 import { getClaudeProfileManager } from '../claude-profile-manager';
+import { isCodexAccountId, recordCodexRateLimit } from '../claude-profile/codex-accounts';
+import { pickEngine } from '../claude-code/env';
 import { getOperationRegistry } from '../claude-profile/operation-registry';
 import { getAPIProfileEnv } from '../services/profile';
 import { getSpecsDir } from '../../shared/constants';
@@ -500,6 +502,13 @@ export class AgentManager extends EventEmitter {
    * automatic swap) pick another profile. Returns that profile's ID.
    */
   private recordRateLimit(entry: RunEntry, payload: Record<string, unknown>): string | undefined {
+    // A Codex run: the limit belongs to its ChatGPT/OpenAI account
+    const runProfileId = entry.run?.session?.profileId;
+    if (isCodexAccountId(runProfileId)) {
+      const resetAt = typeof payload.resetAt === 'string' ? new Date(payload.resetAt) : null;
+      recordCodexRateLimit(runProfileId!, resetAt && !Number.isNaN(resetAt.getTime()) ? resetAt : new Date(Date.now() + 60 * 60 * 1000));
+      return runProfileId;
+    }
     if (entry.apiProfileActive) return undefined;
     try {
       const profileManager = getClaudeProfileManager();
@@ -524,6 +533,13 @@ export class AgentManager extends EventEmitter {
 
   private registerWithOperationRegistry(taskId: string, entry: RunEntry): void {
     if (entry.apiProfileActive) return;
+    // Claude account swaps move Claude Code runs only; Codex runs swap among Codex accounts on a limit
+    void pickEngine(entry.profileId).then((engine) => {
+      if (engine === 'claude' && !entry.killed) this.registerClaudeOperation(taskId, entry);
+    }).catch(() => undefined);
+  }
+
+  private registerClaudeOperation(taskId: string, entry: RunEntry): void {
     try {
       const profileManager = getClaudeProfileManager();
       const profile = entry.profileId ? profileManager.getProfile(entry.profileId) : profileManager.getActiveProfile();
@@ -563,7 +579,9 @@ export class AgentManager extends EventEmitter {
 
     if (outcome.status === 'auth_failed') {
       this.emit('auth-failure', taskId, {
-        profileId: entry.apiProfileActive ? undefined : entry.profileId ?? getActiveProfileIdSafe(),
+        profileId: isCodexAccountId(entry.run?.session?.profileId)
+          ? entry.run?.session?.profileId
+          : entry.apiProfileActive ? undefined : entry.profileId ?? getActiveProfileIdSafe(),
         failureType: 'invalid',
         message: outcome.error,
       });

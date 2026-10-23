@@ -300,6 +300,8 @@ export function getEmailFromConfigDir(configDir?: string): string | null {
  * apply); a detected setup on a cloud provider, an API key or a gateway doesn't
  */
 export function usesClaudeSubscription(profile: ClaudeProfile): boolean {
+  // Codex accounts are listed only while signed in, and Codex keeps its own sign-in fresh
+  if (profile.provider === 'codex') return false;
   return !profile.detected || profile.detected.provider === 'subscription';
 }
 

@@ -15,6 +15,7 @@ interface MockRun {
 
 const runs: MockRun[] = [];
 
+vi.mock('../claude-code/env', () => ({ pickEngine: vi.fn(async () => 'claude') }));
 vi.mock('../claude-code/task-runner', () => ({
   ClaudeTaskRun: class {
     private resolve!: (outcome: TaskRunOutcome) => void;
