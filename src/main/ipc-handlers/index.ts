@@ -19,6 +19,7 @@ import { registerInsightsHandlers } from './insights-handlers';
 import { registerAppUpdateHandlers } from './app-update-handlers';
 import { registerClaudeCodeHandlers } from './claude-code-handlers';
 import { registerGraphifyHandlers } from './graphify-handlers';
+import { registerGitHubHandlers } from './github-handlers';
 import { registerSelfImproveHandlers } from './self-improve-handlers';
 import { registerProjectIndexHandlers } from './project-index-handlers';
 import { registerLiveAgentHandlers } from './live-agent-handlers';
@@ -82,6 +83,7 @@ export function setupIpcHandlers(
 
   // Graphify CLI handlers (version, installation, project memory graph)
   registerGraphifyHandlers();
+  registerGitHubHandlers();
   registerSelfImproveHandlers();
   registerProjectIndexHandlers();
 

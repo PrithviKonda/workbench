@@ -11,6 +11,9 @@ export const taskMock = {
     data: mockTasks.filter(t => t.projectId === projectId)
   }),
 
+  listGitHubItems: async () => ({ success: true, data: [] }),
+  getGitHubItemStates: async () => ({ success: true, data: { issues: {}, prs: {}, openIssues: [], openPrs: [] } }),
+
   createTask: async (projectId: string, title: string, description: string) => ({
     success: true,
     data: {

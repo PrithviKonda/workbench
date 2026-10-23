@@ -16,6 +16,7 @@ export interface TerminalTaskSessionOptions {
   taskId?: string;
 }
 
+import type { GitHubItem, GitHubItemKind, GitHubItemStates } from './github';
 import type { IPCResult } from './common';
 import type { KanbanPreferences } from './kanban';
 import type {
@@ -153,6 +154,8 @@ export interface ElectronAPI {
   // Task operations
   getTasks: (projectId: string, options?: { forceRefresh?: boolean }) => Promise<IPCResult<Task[]>>;
   createTask: (projectId: string, title: string, description: string, metadata?: TaskMetadata) => Promise<IPCResult<Task>>;
+  listGitHubItems: (projectId: string, kind: GitHubItemKind, state: 'open' | 'closed') => Promise<IPCResult<GitHubItem[]>>;
+  getGitHubItemStates: (projectId: string) => Promise<IPCResult<GitHubItemStates>>;
   deleteTask: (taskId: string) => Promise<IPCResult>;
   updateTask: (taskId: string, updates: { title?: string; description?: string }) => Promise<IPCResult<Task>>;
   startTask: (taskId: string, options?: TaskStartOptions) => void;

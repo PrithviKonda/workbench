@@ -20,6 +20,7 @@ import {
 } from '../../shared/constants';
 import { stopTask, checkTaskRunning, isIncompleteHumanReview, archiveTasks, hasRecentActivity, startTaskOrQueue, taskHasErrors, retryTask } from '../stores/task-store';
 import type { Task, TaskStatus } from '../../shared/types';
+import { GitHubChip } from './github/GitHubChip';
 
 // Stuck detection interval (ms). XState handles normal process exits (PROCESS_EXITED); this
 // catches a task left In Progress or AI Review without a run (e.g. the app quit mid-run),
@@ -274,7 +275,10 @@ export const TaskCard = memo(function TaskCard({
 
         {/* Footer */}
         <div className="mt-3 flex items-center justify-between">
-          <span className="text-sm text-(--nav-label-color)">{relativeTime}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="text-sm text-(--nav-label-color)">{relativeTime}</span>
+            <GitHubChip task={task} />
+          </span>
 
           <div className="flex items-center gap-1.5">
             {/* Action buttons: icon buttons like the settings dialog's (label in the tooltip) */}

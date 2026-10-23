@@ -128,6 +128,8 @@ export const IPC_CHANNELS = {
   CLAUDE_PROFILE_DELETE: 'claude:profileDelete',
   CLAUDE_ACCOUNTS_LOGIN: 'claude:accountsLogin',  // Claude Code's sign-in in the user's terminal
   CLAUDE_ACCOUNTS_REDETECT: 'claude:accountsRedetect',  // Detect Claude Code's setups again after a sign-in
+  GITHUB_ITEMS_LIST: 'github:itemsList',  // A project's GitHub issues or pull requests (Kanban GitHub dialog)
+  GITHUB_ITEM_STATES: 'github:itemStates',  // State of a project's issues and pull requests (task card chips)
   CODEX_ACCOUNTS_LIST: 'codex:accountsList',  // ChatGPT/OpenAI (Codex) accounts with their usage
   CODEX_ACCOUNTS_LOGIN: 'codex:accountsLogin',  // Codex's sign-in in the user's terminal
   CODEX_ACCOUNTS_API_KEY: 'codex:accountsApiKey',  // Sign Codex in with an OpenAI API key

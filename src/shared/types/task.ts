@@ -172,6 +172,7 @@ export interface TaskMetadata {
   githubIssueNumber?: number;  // Reference to GitHub issue number if from GitHub (single issue)
   githubIssueNumbers?: number[];  // Reference to multiple GitHub issues if from a batch
   githubUrl?: string;  // GitHub issue URL
+  githubPrNumber?: number;  // Pull request the task came from (GitHub dialog on the board)
   githubBatchTheme?: string;  // Theme/title of the GitHub issue batch
 
   // Context

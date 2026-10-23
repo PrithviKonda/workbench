@@ -15,6 +15,7 @@ export * from './profile';
 export * from './unified-account';
 export * from './settings';
 export * from './insights';
+export * from './github';
 export * from './app-update';
 export * from './cli';
 export * from './provider-account';

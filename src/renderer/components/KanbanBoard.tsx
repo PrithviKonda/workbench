@@ -21,7 +21,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy
 } from '@dnd-kit/sortable';
-import { Plus, Inbox, Loader2, Eye, CheckCircle2, Archive, RefreshCw } from 'lucide-react';
+import { Plus, Inbox, Loader2, Eye, CheckCircle2, Archive, RefreshCw, Github } from 'lucide-react';
 import { SettingsIcon as Settings } from './icons/app-icons';
 import { ScrollArea } from './ui/scroll-area';
 import { Button } from './ui/button';
@@ -36,6 +36,8 @@ import { resolveMaxParallelTasks, getTaskColumn as getVisualColumn, canMoveTask 
 import { useProjectStore } from '../stores/project-store';
 import { useSettingsStore } from '../stores/settings-store';
 import { WorktreeCleanupDialog } from './WorktreeCleanupDialog';
+import { GitHubDialog } from './github/GitHubDialog';
+import { useGitHubStore } from '../stores/github-store';
 import type { Task, TaskStatus, TaskOrderState } from '../../shared/types';
 
 // Type guard for valid drop column targets - preserves literal type from TASK_STATUS_COLUMNS
@@ -402,6 +404,8 @@ export function KanbanBoard({ tasks, onTaskClick, onNewTaskClick, onRefresh, isR
   const [overColumnId, setOverColumnId] = useState<string | null>(null);
   const { showArchived, toggleShowArchived } = useViewState();
 
+  const [gitHubOpen, setGitHubOpen] = useState(false);
+
   // Opening the board reloads the tasks from disk, like the Refresh button
   const onRefreshRef = useRef(onRefresh);
   onRefreshRef.current = onRefresh;
@@ -412,8 +416,9 @@ export function KanbanBoard({ tasks, onTaskClick, onNewTaskClick, onRefresh, isR
   // Project store for queue settings
   const projects = useProjectStore((state) => state.projects);
 
-  // Get projectId from first task
-  const projectId = tasks[0]?.projectId;
+  // The board's project (the selected one when the board has no tasks yet)
+  const selectedProjectId = useProjectStore((state) => state.selectedProjectId);
+  const projectId = tasks[0]?.projectId ?? selectedProjectId ?? undefined;
   const project = projectId ? projects.find((p) => p.id === projectId) : undefined;
   const appMaxParallelTasks = useSettingsStore((state) => state.settings.maxParallelTasks);
   const maxParallelTasks = resolveMaxParallelTasks(appMaxParallelTasks, project?.settings?.maxParallelTasks);
@@ -434,6 +439,40 @@ export function KanbanBoard({ tasks, onTaskClick, onNewTaskClick, onRefresh, isR
     isProcessing: false,
     error: undefined
   });
+
+  // GitHub states for the cards' chips and the summary line: once per project, again on Refresh
+  const gitHubStates = useGitHubStore((state) => (projectId ? state.states[projectId] : undefined));
+  useEffect(() => {
+    if (projectId) void useGitHubStore.getState().load(projectId);
+  }, [projectId]);
+  const refreshBoard = useCallback(() => {
+    onRefresh?.();
+    if (projectId) void useGitHubStore.getState().load(projectId, true);
+  }, [onRefresh, projectId]);
+
+  // What's on the docket, in one line: running, waiting for you, to do, done, and GitHub work not on the board
+  const docket = useMemo(() => {
+    const active = tasks.filter((task) => !task.metadata?.archivedAt);
+    const count = (...statuses: TaskStatus[]) => active.filter((task) => statuses.includes(task.status)).length;
+    const tracked = (key: 'githubIssueNumber' | 'githubPrNumber', n: number) => active.some((task) => task.metadata?.[key] === n);
+    const untrackedIssues = gitHubStates?.openIssues.filter((n) => !tracked('githubIssueNumber', n)).length ?? 0;
+    const untrackedPrs = gitHubStates?.openPrs.filter((n) => !tracked('githubPrNumber', n)).length ?? 0;
+    return {
+      running: count('queue', 'in_progress', 'ai_review'),
+      review: count('human_review', 'pr_created'),
+      attention: count('error'),
+      todo: count('backlog'),
+      done: count('done'),
+      github: untrackedIssues + untrackedPrs,
+    };
+  }, [tasks, gitHubStates]);
+  const docketParts = [
+    docket.attention > 0 && t('kanban.docket.attention', { count: docket.attention }),
+    docket.review > 0 && t('kanban.docket.review', { count: docket.review }),
+    docket.running > 0 && t('kanban.docket.running', { count: docket.running }),
+    docket.todo > 0 && t('kanban.docket.todo', { count: docket.todo }),
+    docket.done > 0 && t('kanban.docket.done', { count: docket.done }),
+  ].filter(Boolean) as string[];
 
   // Calculate archived count for Done column button
   const archivedCount = useMemo(() =>
@@ -764,19 +803,42 @@ export function KanbanBoard({ tasks, onTaskClick, onNewTaskClick, onRefresh, isR
 
   return (
     <div className="flex h-full flex-col">
-      {/* Kanban header: the last board action's failure, then refresh */}
+      {/* Kanban header: what's on the docket (or the last board action's failure), GitHub, refresh */}
       <div className="flex items-center justify-end gap-4 px-6 pt-2">
-          {boardError && (
+          {boardError ? (
             <p role="alert" className="mr-auto min-w-0 truncate text-sm text-destructive" title={boardError}>
               {boardError}
             </p>
+          ) : (
+            <p className="mr-auto min-w-0 truncate text-sm text-(--nav-label-color)" aria-live="polite">
+              {docketParts.length ? docketParts.join(' · ') : t('kanban.docket.empty')}
+              {docket.github > 0 && (
+                <>
+                  {' · '}
+                  <button type="button" className="text-foreground underline-offset-2 hover:underline" onClick={() => setGitHubOpen(true)}>
+                    {t('kanban.docket.github', { count: docket.github })}
+                  </button>
+                </>
+              )}
+            </p>
           )}
           <div className="flex items-center gap-2">
+            {projectId && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setGitHubOpen(true)}
+                className="h-8 gap-1.5 text-[0.8125rem] text-muted-foreground hover:bg-nav-hover hover:text-foreground"
+              >
+                <Github className="h-3.5 w-3.5" />
+                {t('kanban.github')}
+              </Button>
+            )}
             {onRefresh && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={onRefresh}
+                onClick={refreshBoard}
                 disabled={isRefreshing}
                 className="h-8 gap-1.5 text-[0.8125rem] text-muted-foreground hover:bg-nav-hover hover:text-foreground"
               >
@@ -823,6 +885,8 @@ export function KanbanBoard({ tasks, onTaskClick, onNewTaskClick, onRefresh, isR
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {projectId && <GitHubDialog open={gitHubOpen} onOpenChange={setGitHubOpen} projectId={projectId} tasks={tasks} />}
 
       {/* Worktree cleanup confirmation dialog */}
       <WorktreeCleanupDialog

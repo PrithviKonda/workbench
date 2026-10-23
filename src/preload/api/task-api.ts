@@ -22,7 +22,10 @@ import type {
   WorktreeMergePRResult,
   MergePRProgress,
   PullRequestState,
-  ImageAttachment
+  ImageAttachment,
+  GitHubItem,
+  GitHubItemKind,
+  GitHubItemStates
 } from '../../shared/types';
 
 export interface TaskAPI {
@@ -34,6 +37,8 @@ export interface TaskAPI {
     description: string,
     metadata?: TaskMetadata
   ) => Promise<IPCResult<Task>>;
+  listGitHubItems: (projectId: string, kind: GitHubItemKind, state: 'open' | 'closed') => Promise<IPCResult<GitHubItem[]>>;
+  getGitHubItemStates: (projectId: string) => Promise<IPCResult<GitHubItemStates>>;
   deleteTask: (taskId: string) => Promise<IPCResult>;
   updateTask: (
     taskId: string,
@@ -119,6 +124,12 @@ export const createTaskAPI = (): TaskAPI => ({
     metadata?: TaskMetadata
   ): Promise<IPCResult<Task>> =>
     ipcRenderer.invoke(IPC_CHANNELS.TASK_CREATE, projectId, title, description, metadata),
+
+  listGitHubItems: (projectId: string, kind: GitHubItemKind, state: 'open' | 'closed'): Promise<IPCResult<GitHubItem[]>> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITHUB_ITEMS_LIST, projectId, kind, state),
+
+  getGitHubItemStates: (projectId: string): Promise<IPCResult<GitHubItemStates>> =>
+    ipcRenderer.invoke(IPC_CHANNELS.GITHUB_ITEM_STATES, projectId),
 
   deleteTask: (taskId: string): Promise<IPCResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.TASK_DELETE, taskId),

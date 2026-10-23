@@ -109,7 +109,23 @@
     "deleteSuccess": "Successfully deleted {{count}} task(s)",
     "deleteError": "Failed to delete some tasks",
     "clearSelection": "Clear Selection",
-    "resizeColumn": "Resize column"
+    "resizeColumn": "Resize column",
+    "github": "GitHub",
+    "docket": {
+      "empty": "Nothing on the board yet",
+      "attention_one": "{{count}} needs attention",
+      "attention_other": "{{count}} need attention",
+      "review_one": "{{count}} waiting for your review",
+      "review_other": "{{count}} waiting for your review",
+      "running_one": "{{count}} being worked on",
+      "running_other": "{{count}} being worked on",
+      "todo_one": "{{count}} to do",
+      "todo_other": "{{count}} to do",
+      "done_one": "{{count}} done",
+      "done_other": "{{count}} done",
+      "github_one": "{{count}} open on GitHub, not on the board",
+      "github_other": "{{count}} open on GitHub, not on the board"
+    }
   },
   "queue": {
     "limitReached": "Parallel task limit reached ({{current}}/{{max}}). Task moved to queue.",
@@ -330,6 +346,34 @@
       "openAgent": "Open agent",
       "noProject": "The task's project is not open",
       "noRoom": "All agent windows of this project are in use. Close one to open this session"
+    }
+  },
+  "github": {
+    "title": "GitHub issues and pull requests",
+    "description": "Add open issues and pull requests to the board as tasks, or look back at closed ones",
+    "kind": "Issues or pull requests",
+    "issues": "Issues",
+    "pullRequests": "Pull requests",
+    "stateFilter": "Open or closed",
+    "open": "Open",
+    "closed": "Closed",
+    "refresh": "Refresh",
+    "loading": "Loading from GitHub",
+    "emptyOpen": "Nothing open on GitHub",
+    "emptyClosed": "Nothing closed yet",
+    "add": "Add",
+    "addAll_one": "Add {{count}} to board",
+    "addAll_other": "Add all {{count}} to board",
+    "onBoard": "On the board",
+    "view": "View",
+    "openOnGitHub": "Open on GitHub",
+    "draft": "Draft",
+    "loadFailed": "Couldn't load from GitHub",
+    "addFailed": "Couldn't add the task",
+    "state": {
+      "open": "Open",
+      "closed": "Closed",
+      "merged": "Merged"
     }
   }
 }
