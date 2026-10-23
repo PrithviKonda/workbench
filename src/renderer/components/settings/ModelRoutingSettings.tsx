@@ -62,7 +62,7 @@ export function ModelRoutingSettings({ settings, onSettingsChange }: ModelRoutin
     const id = `route-${step}-${tab}`;
     const select = (key: string, value: string, onChange: (v: string) => void, items: React.ReactNode) => (
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger id={`${id}-${key}`} className="h-8 w-36" aria-label={t(`modelRouting.${key}`)}>
+        <SelectTrigger id={`${id}-${key}`} className="h-8 w-44" aria-label={t(`modelRouting.${key}`)}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>{items}</SelectContent>
