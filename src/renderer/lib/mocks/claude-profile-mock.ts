@@ -32,6 +32,8 @@ export const claudeProfileMock = {
   renameCodexAccount: async () => ({ success: true }),
   signOutCodexAccount: async () => ({ success: true }),
   getCodexModels: async () => ({ success: true, data: {} }),
+  getCodexCliInfo: async () => ({ success: true, data: { found: false } }),
+  installCodexCli: async () => ({ success: true }),
 
   renameClaudeProfile: async () => ({ success: true }),
 

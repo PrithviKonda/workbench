@@ -275,6 +275,8 @@ export interface ElectronAPI {
   renameCodexAccount: (accountId: string, name: string) => Promise<IPCResult>;
   signOutCodexAccount: (accountId: string) => Promise<IPCResult>;
   getCodexModels: () => Promise<IPCResult<Record<string, string>>>;
+  getCodexCliInfo: () => Promise<IPCResult<{ found: boolean; version?: string }>>;
+  installCodexCli: () => Promise<IPCResult>;
   renameClaudeProfile: (profileId: string, newName: string) => Promise<IPCResult>;
   setActiveClaudeProfile: (profileId: string) => Promise<IPCResult>;
   /** Switch terminal to use a different Claude profile (restarts Claude with new config) */

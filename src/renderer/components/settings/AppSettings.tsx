@@ -26,6 +26,7 @@ import { ClaudeCodeTaskSettings } from './ClaudeCodeTaskSettings';
 import { AdvancedSettings } from './AdvancedSettings';
 import { ClaudeCodeSettings } from './ClaudeCodeSettings';
 import { GraphifySettings } from './GraphifySettings';
+import { CodexCliSettings } from './CodexCliSettings';
 import { AccountSettings } from './AccountSettings';
 import { ProjectSettingsContent, ProjectSettingsSection } from './ProjectSettingsContent';
 import { ConnectorsSettings } from './ConnectorsSettings';
@@ -235,6 +236,7 @@ export function AppSettingsDialog({ open, onOpenChange, initialSection, initialP
             <AdvancedSettings settings={settings} onSettingsChange={setSettings} section="updates" version={version} />
             {/* Claude Code CLI (status, install/update, version switching) */}
             <ClaudeCodeSettings />
+            <CodexCliSettings />
             {/* Graphify CLI (builds the projects' memory graphs) */}
             <GraphifySettings />
           </>

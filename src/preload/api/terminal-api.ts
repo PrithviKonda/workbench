@@ -94,6 +94,8 @@ export interface TerminalAPI {
   renameCodexAccount: (accountId: string, name: string) => Promise<IPCResult>;
   signOutCodexAccount: (accountId: string) => Promise<IPCResult>;
   getCodexModels: () => Promise<IPCResult<Record<string, string>>>;
+  getCodexCliInfo: () => Promise<IPCResult<{ found: boolean; version?: string }>>;
+  installCodexCli: () => Promise<IPCResult>;
   renameClaudeProfile: (profileId: string, newName: string) => Promise<IPCResult>;
   setActiveClaudeProfile: (profileId: string) => Promise<IPCResult>;
   switchClaudeProfile: (terminalId: string, profileId: string) => Promise<IPCResult>;
@@ -397,6 +399,12 @@ export const createTerminalAPI = (): TerminalAPI => ({
 
   getCodexModels: (): Promise<IPCResult<Record<string, string>>> =>
     ipcRenderer.invoke(IPC_CHANNELS.CODEX_MODELS),
+
+  getCodexCliInfo: (): Promise<IPCResult<{ found: boolean; version?: string }>> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CODEX_CLI_INFO),
+
+  installCodexCli: (): Promise<IPCResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CODEX_CLI_INSTALL),
 
   renameClaudeProfile: (profileId: string, newName: string): Promise<IPCResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILE_RENAME, profileId, newName),

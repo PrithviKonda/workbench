@@ -33,7 +33,7 @@ import {
 } from '../claude-profile/codex-accounts';
 import { codexModelFor, readCodexModels } from '../claude-code/codex';
 import { spawnTool } from '../platform/runtime-exec';
-import { getAugmentedEnvAsync } from '../env-utils';
+import { findExecutableAsync, getAugmentedEnvAsync } from '../env-utils';
 
 /** Run `codex <args>` for one account's CODEX_HOME, optionally with stdin, and wait for it */
 async function runCodexCommand(args: string[], codexHome: string, stdin?: string): Promise<{ code: number | null; output: string }> {
@@ -366,6 +366,25 @@ export function registerTerminalHandlers(
       if (model) tiers[tier] = model.displayName;
     }
     return { success: true, data: tiers };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CODEX_CLI_INFO, async (): Promise<IPCResult<{ found: boolean; version?: string }>> => {
+    const codex = await getToolInfoAsync('codex', { refreshIfMissing: true });
+    return { success: true, data: { found: codex.found, version: codex.version } };
+  });
+
+  // Install (or update) the Codex CLI in the user's terminal, like the Claude Code and Graphify
+  // installs: with npm when Node.js is there, else Homebrew
+  ipcMain.handle(IPC_CHANNELS.CODEX_CLI_INSTALL, async (): Promise<IPCResult> => {
+    try {
+      const [npm, brew] = await Promise.all([findExecutableAsync('npm'), isWindows() ? null : findExecutableAsync('brew')]);
+      const command = npm ? 'npm install -g @openai/codex@latest' : brew ? 'brew install codex' : null;
+      if (!command) return { success: false, error: 'Install Node.js from https://nodejs.org first, then try again' };
+      await openTerminalWithCommand(command);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to open a terminal' };
+    }
   });
 
   // After Claude Code's own sign-in in a terminal: list the account it signed in

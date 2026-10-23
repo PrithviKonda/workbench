@@ -134,6 +134,8 @@ export const IPC_CHANNELS = {
   CODEX_ACCOUNTS_RENAME: 'codex:accountsRename',
   CODEX_ACCOUNTS_SIGN_OUT: 'codex:accountsSignOut',
   CODEX_MODELS: 'codex:models',  // Codex's models, for model names in Settings
+  CODEX_CLI_INFO: 'codex:cliInfo',  // Codex CLI found / version (Settings > Updates)
+  CODEX_CLI_INSTALL: 'codex:cliInstall',  // Install or update the Codex CLI in the user's terminal
   CLAUDE_PROFILE_RENAME: 'claude:profileRename',
   CLAUDE_PROFILE_SET_ACTIVE: 'claude:profileSetActive',
   CLAUDE_PROFILE_SWITCH: 'claude:profileSwitch',

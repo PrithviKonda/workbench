@@ -682,5 +682,16 @@
       "notSignedIn": "No new sign-in was found",
       "failedToStart": "Couldn't open a terminal for Codex's sign-in"
     }
+  },
+  "codexCli": {
+    "title": "Codex CLI",
+    "description": "OpenAI's agent CLI that runs tasks with a ChatGPT or OpenAI account",
+    "status": "Status",
+    "installed": "Installed {{version}}",
+    "notInstalled": "Not installed",
+    "install": "Install",
+    "update": "Update",
+    "refresh": "Refresh",
+    "installFailed": "Couldn't start the install"
   }
 }
