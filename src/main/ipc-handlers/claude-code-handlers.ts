@@ -33,6 +33,7 @@ import { killRuntimeProcess, runTool, spawnTool } from '../platform/runtime-exec
 import { execInWsl } from '../platform/wsl-exec-basic';
 import { getWslExePath } from '../platform/wsl-detect';
 import type { WslToolPaths } from '../../shared/types';
+import { findExecutableAsync } from '../env-utils';
 
 /** Running `claude auth login` processes by profile id, so a sign-in can be cancelled */
 const authLogins = new Map<string, { child: ChildProcess; cancelled: boolean }>();
@@ -983,15 +984,17 @@ export async function openTerminalWithCommand(command: string, env?: NodeJS.Proc
       { cmd: 'xterm', args: ['-e', 'bash', '-c', bashCommand] },
     ];
 
+    // spawn() reports a missing program asynchronously (an 'error' event, not a throw): start the
+    // first terminal that is installed
     let opened = false;
     for (const { cmd, args } of terminals) {
-      try {
-        spawn(cmd, args, { detached: true, stdio: 'ignore' }).unref();
-        opened = true;
-        console.warn('[Claude Code] Opened terminal:', cmd);
-        break;
-      } catch {
-      }
+      if (!(await findExecutableAsync(cmd))) continue;
+      const child = spawn(cmd, args, { detached: true, stdio: 'ignore' });
+      child.on('error', (error) => console.warn('[Claude Code] Terminal failed to start:', cmd, error.message));
+      child.unref();
+      opened = true;
+      console.warn('[Claude Code] Opened terminal:', cmd);
+      break;
     }
 
     if (!opened) {
@@ -1124,6 +1127,7 @@ function toolConfigFromSettings(settings: Record<string, unknown>): Parameters<t
     githubCLIPath: str(settings.githubCLIPath),
     gitlabCLIPath: str(settings.gitlabCLIPath),
     claudePath: str(settings.claudePath),
+    codexPath: str(settings.codexPath),
     wslToolPaths: settings.wslToolPaths as WslToolPaths | undefined,
   };
 }

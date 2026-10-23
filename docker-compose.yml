@@ -1,0 +1,17 @@
+services:
+  workbench:
+    build: .
+    image: workbench
+    ports:
+      - "6080:6080"
+    shm_size: 1gb
+    init: true
+    environment:
+      - OPENAI_API_KEY
+      - ANTHROPIC_API_KEY
+    volumes:
+      - home:/home/node # sign-ins and app data
+      - ./projects:/workspace
+
+volumes:
+  home:

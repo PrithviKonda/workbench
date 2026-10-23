@@ -1,0 +1,13 @@
+node_modules
+out
+dist
+build
+.git
+.worktrees
+.workbench
+projects
+coverage
+*.log
+.env
+.env.*
+.DS_Store

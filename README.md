@@ -40,6 +40,25 @@ Every creative builder has a graveyard of ideas. Each idea wants an evening you 
 
 Most tools in this space write their own agent harness, and none of them outperforms the one you already have installed. You see it in the results: a loop that plans worse, retries more, and spends more than Claude Code does on the same task. So why build another harness when one already works? Workbench runs on Claude Code rather than competing with it, using the same CLI with your own accounts, subagents, skills, and MCP servers, and spending its own effort on everything around the session instead.
 
+## Run with Docker
+
+The image runs the full desktop app in a container and shows it in your browser, with the Claude Code and Codex CLIs preinstalled.
+
+```bash
+docker compose up --build
+```
+
+Open http://localhost:6080, then sign in from Settings > Accounts (Codex prints a device code to enter on another device; Claude signs in as usual). Setting `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` before starting passes the key into the container instead. Put your repositories in `./projects` and open them from `/workspace` in the app. Sign-ins and app data live in the `home` volume, so they survive restarts.
+
+If someone sent you the image as a file, load it and start it without building:
+
+```bash
+docker load -i workbench-image.tar.gz
+docker run --rm --init -p 6080:6080 --shm-size=1g -v workbench-home:/home/node -v "$PWD/projects:/workspace" workbench
+```
+
+To share your build, run `docker save workbench | gzip > workbench-image.tar.gz`. The image only runs on the CPU architecture it was built on (arm64 from an Apple Silicon Mac, amd64 from most PCs); build with `docker buildx build --platform linux/amd64 -t workbench --load .` for the other one.
+
 ## Contribute
 
 Pull requests are temporarily not accepted, but every other kind of contribution is welcome. If something looks broken or missing, open an [issue](https://github.com/proactive-agent/workbench/issues) describing what you expected to happen instead. Ideas, questions, and features you would like to see belong in [discussions](https://github.com/proactive-agent/workbench/discussions), where they can be argued over before implementation.
