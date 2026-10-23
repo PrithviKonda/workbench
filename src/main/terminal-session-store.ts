@@ -23,6 +23,8 @@ export interface TerminalSession {
   displayOrder?: number;
   /** The run of the app that has this window open (absent in files written before this) */
   owner?: SessionOwner;
+  /** The agent CLI the window runs (absent: Claude Code) */
+  engine?: 'claude' | 'codex';
 }
 
 /**

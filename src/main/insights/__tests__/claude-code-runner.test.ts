@@ -93,6 +93,7 @@ import {
   INSIGHTS_TASK_TOOLS_RULE,
   resetTaskToolsBridgeForTests,
   toClaudeModel,
+  pageRoute,
   type InsightsStreamEvent,
 } from '../claude-code-runner';
 import { INSIGHTS_ERROR_CODES, parseInsightsError } from '../../../shared/constants/insights';
@@ -365,5 +366,22 @@ describe('toClaudeModel', () => {
     expect(toClaudeModel('us.anthropic.haiku-x')).toBe('haiku');
     expect(toClaudeModel('gpt-5')).toBe('sonnet');
     expect(toClaudeModel(undefined)).toBe('sonnet');
+  });
+});
+
+describe('pageRoute', () => {
+  it('lets routing decide without a page engine', () => {
+    expect(pageRoute({ engine: 'codex', model: 'gpt-5', effort: 'high' }, undefined))
+      .toEqual({ route: { engine: 'codex', model: 'gpt-5', effort: 'high' }, engine: 'codex' });
+  });
+
+  it('keeps the page engine and drops model and effort routed to the other engine', () => {
+    expect(pageRoute({ engine: 'claude', model: 'opus', effort: 'max' }, 'codex')).toEqual({ route: {}, engine: 'codex' });
+    expect(pageRoute({ model: 'opus' }, 'codex')).toEqual({ route: {}, engine: 'codex' });
+  });
+
+  it('keeps model and effort routed to the page engine', () => {
+    expect(pageRoute({ engine: 'codex', model: 'gpt-5', effort: 'low' }, 'codex'))
+      .toEqual({ route: { engine: 'codex', model: 'gpt-5', effort: 'low' }, engine: 'codex' });
   });
 });

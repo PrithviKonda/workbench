@@ -41,6 +41,7 @@ import {
   type TranscriptFile,
 } from './claude-code/session-spending';
 import { claudeConfigDirs } from './claude-profile/profile-config-dirs';
+import { findCodexProjectSessions, readCodexRolloutSpending } from './claude-profile/codex-accounts';
 import type { ClaudeRunInfo } from '../shared/types/claude-code';
 import type { Project, ProjectCostMetrics, ProjectDailyCost } from '../shared/types';
 
@@ -153,20 +154,29 @@ async function countableSessions(project: Project, taskSessions: Set<string>): P
   // A session started on one account can end up under another's config dir after a swap
   const configDirs = claudeConfigDirs(recorded.map((session) => session.configDir));
   const countable: CountableSession[] = [];
+  const skipUnder = [path.join(project.path, project.autoBuildPath || '.workbench', 'worktrees')];
+  // Codex threads (agent windows, the ChatGPT page, `codex` in a terminal) keep rollout files instead
+  const codex = await findCodexProjectSessions(project.path, { skip: taskSessions, skipUnder });
+  const codexById = new Map(codex.map((session) => [session.sessionId, session]));
 
   for (const session of recorded) {
     // A window that continued a task's session: the task's own figures already carry its cost
     if (taskSessions.has(session.sessionId)) continue;
     countable.push({
       session,
-      transcript: await findSessionTranscript(session.sessionId, configDirs, session.cwd),
+      transcript:
+        codexById.get(session.sessionId) ?? (await findSessionTranscript(session.sessionId, configDirs, session.cwd)),
     });
   }
 
-  const found = await findProjectSessions(project.path, configDirs, {
-    skip: new Set([...taskSessions, ...recorded.map((session) => session.sessionId)]),
-    skipUnder: [path.join(project.path, project.autoBuildPath || '.workbench', 'worktrees')],
-  });
+  const recordedIds = new Set(recorded.map((session) => session.sessionId));
+  const found = [
+    ...(await findProjectSessions(project.path, configDirs, {
+      skip: new Set([...taskSessions, ...recordedIds]),
+      skipUnder,
+    })),
+    ...codex.filter((session) => !recordedIds.has(session.sessionId)),
+  ];
   // Nothing records when a session Workbench did not start began; its last write is all there is
   const records = found.map((session) => ({
     sessionId: session.sessionId,
@@ -201,7 +211,9 @@ async function bookSessionSpending(project: Project, taskSessions: Set<string>, 
       // Unchanged, or gone: what was read from it last time is what the session spent
       spending = cachedSpending(session.spent);
     } else {
-      spending = await readTranscriptSpending(transcript.file);
+      spending = path.basename(transcript.file).startsWith('rollout-')
+        ? await readCodexRolloutSpending(transcript.file)
+        : await readTranscriptSpending(transcript.file);
       read.set(session.sessionId, {
         totalCostUsd: spending.totalCostUsd,
         days: Object.fromEntries(spending.byDay),

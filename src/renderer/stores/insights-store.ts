@@ -239,6 +239,16 @@ export const useInsightsStore = create<InsightsState>((set, _get) => ({
 
 // Helper functions
 
+/** The page a session belongs to: 'codex' (ChatGPT page) or 'claude' (Claude page, also when unset) */
+export function sessionEngine(modelConfig?: InsightsModelConfig): 'claude' | 'codex' {
+  return modelConfig?.engine === 'codex' ? 'codex' : 'claude';
+}
+
+/** The sessions shown on a page's history list */
+export function sessionsForEngine<T extends { modelConfig?: InsightsModelConfig }>(sessions: T[], engine: 'claude' | 'codex'): T[] {
+  return sessions.filter((s) => sessionEngine(s.modelConfig) === engine);
+}
+
 export async function loadInsightsSessions(projectId: string, includeArchived?: boolean): Promise<void> {
   const store = useInsightsStore.getState();
   store.setLoadingSessions(true);

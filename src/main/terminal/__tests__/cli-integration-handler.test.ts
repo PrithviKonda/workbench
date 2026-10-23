@@ -8,6 +8,12 @@ import { buildCdCommand, escapeShellArg } from '../../../shared/utils/shell-esca
 
 // Mock the platform module (main/platform/index.ts)
 vi.mock('../../claude-code/env', () => ({ pickEngine: vi.fn(async () => 'claude') }));
+vi.mock('../../claude-profile/codex-accounts', () => ({
+  getBestCodexAccount: vi.fn(() => undefined),
+  defaultCodexHome: vi.fn(() => '/home/user/.codex'),
+  isCodexAccountId: vi.fn((id?: string) => !!id?.startsWith('codex:')),
+}));
+vi.mock('../../cli-tool-manager', () => ({ getToolInfoAsync: vi.fn(async () => ({ found: true, path: '/usr/local/bin/codex' })) }));
 vi.mock('../../platform', () => ({
   isWindows: vi.fn(() => false),
   isMacOS: vi.fn(() => false),
@@ -1496,5 +1502,55 @@ describe('restoring an agent window', () => {
 
     expect(written).toContain('--continue');
     expect(mockRecordAgentSession).not.toHaveBeenCalled();
+  });
+});
+
+describe('agent window engine', () => {
+  beforeEach(() => {
+    mockPlatform('linux');
+    mockWriteToPty.mockClear();
+    mockGetClaudeCliInvocationAsync.mockResolvedValue({ command: '/opt/claude/bin/claude', env: { PATH: '/usr/bin' } });
+    mockInitializeClaudeProfileManager.mockResolvedValue({
+      getActiveProfile: vi.fn(() => ({ id: 'default', name: 'Default', isDefault: true })),
+      getProfile: vi.fn(),
+      getProfileToken: vi.fn(() => null),
+      markProfileUsed: vi.fn(),
+    });
+  });
+
+  it('runs codex when the New agent menu picks it, and remembers it', async () => {
+    const terminal = createMockTerminal();
+    const { invokeCLIAsync } = await import('../cli-integration-handler');
+    await invokeCLIAsync(terminal, '/tmp/project', undefined, () => null, false, { engine: 'codex' });
+    expect(mockWriteToPty.mock.calls[0][1]).toContain('/usr/local/bin/codex');
+    expect(terminal.engine).toBe('codex');
+    expect(terminal.title).toBe('Codex');
+  });
+
+  it('runs claude when the menu picks it, even on the Codex engine', async () => {
+    const { pickEngine } = await import('../../claude-code/env');
+    vi.mocked(pickEngine).mockResolvedValueOnce('codex');
+    const terminal = createMockTerminal();
+    const { invokeCLIAsync } = await import('../cli-integration-handler');
+    await invokeCLIAsync(terminal, '/tmp/project', undefined, () => null, false, { engine: 'claude' });
+    expect(mockWriteToPty.mock.calls[0][1]).toContain('/opt/claude/bin/claude');
+    expect(terminal.engine).toBe('claude');
+  });
+
+  it('follows the Settings engine when nothing is picked', async () => {
+    const { pickEngine } = await import('../../claude-code/env');
+    vi.mocked(pickEngine).mockResolvedValueOnce('codex');
+    const terminal = createMockTerminal();
+    const { invokeCLIAsync } = await import('../cli-integration-handler');
+    await invokeCLIAsync(terminal, '/tmp/project', undefined, () => null);
+    expect(mockWriteToPty.mock.calls[0][1]).toContain('/usr/local/bin/codex');
+  });
+
+  it('puts a restored Codex window back on its latest Codex session', async () => {
+    const terminal = createMockTerminal({ engine: 'codex', dangerouslySkipPermissions: true });
+    const { resumeClaudeAsync } = await import('../cli-integration-handler');
+    await resumeClaudeAsync(terminal, () => null);
+    const written = mockWriteToPty.mock.calls[0][1] as string;
+    expect(written).toContain("/usr/local/bin/codex' resume --last --dangerously-bypass-approvals-and-sandbox");
   });
 });

@@ -50,11 +50,17 @@
   },
   "grid": {
     "emptyTitle": "Agents",
-    "emptyDescription": "Run Claude agents side by side, each in its own terminal.",
+    "emptyDescription": "Run Claude and ChatGPT agents side by side, each in its own terminal.",
     "newTerminal": "New terminal",
     "count": "{{count}} / {{max}} windows",
     "settingsAriaLabel": "Agent window limit settings",
-    "newAgent": "New agent"
+    "newAgent": "New agent",
+    "chooseAgent": "Choose the agent to start",
+    "engines": {
+      "claude": "Claude Code",
+      "codex": "ChatGPT (Codex)",
+      "codexSignIn": "Sign in to ChatGPT in Settings > Accounts"
+    }
   },
   "taskSelector": {
     "clearTask": "Clear task",
@@ -69,7 +75,8 @@
   },
   "header": {
     "agent": "Agent",
-    "terminal": "Terminal"
+    "terminal": "Terminal",
+    "codex": "ChatGPT"
   },
   "liveAgent": {
     "graphLabel": "Live agent graph",

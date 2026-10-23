@@ -3,8 +3,8 @@
  */
 
 export type RelayWorkerRequest =
-  | { type: 'start'; claudeDirs: string[] }
-  | { type: 'subscribe'; clientId: string; cwd: string; flowDir: string; claudeDirs: string[] }
+  | { type: 'start'; claudeDirs: string[]; codexHomes: string[] }
+  | { type: 'subscribe'; clientId: string; cwd: string; flowDir: string; claudeDirs: string[]; codexHomes: string[] }
   | { type: 'unsubscribe'; clientId: string }
   | { type: 'stop' };
 

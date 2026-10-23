@@ -132,6 +132,13 @@ export function ClaudeCodeTaskSettings({ settings, onSettingsChange, onOpenConne
               ]}
             />
           </SettingsRow>
+          <SettingsRow label={t('claudeCode.engine.crossEngineAsk')} description={t('claudeCode.engine.crossEngineAskDescription')}>
+            <Switch
+              checked={current.crossEngineAsk !== false}
+              onCheckedChange={(crossEngineAsk) => update({ crossEngineAsk })}
+              aria-label={t('claudeCode.engine.crossEngineAsk')}
+            />
+          </SettingsRow>
         </SettingsRows>
       </SettingsSection>
 

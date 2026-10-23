@@ -354,7 +354,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
         if (taskSession && launchCwd) {
           window.electronAPI.resumeTaskSessionInTerminal(id, { ...taskSession, cwd: launchCwd });
         } else {
-          window.electronAPI.invokeCLIInTerminal(id, launchCwd);
+          window.electronAPI.invokeCLIInTerminal(id, launchCwd, created.engine);
         }
       }
       // ALWAYS force PTY resize on creation/remount
@@ -722,6 +722,7 @@ Please confirm you're ready by saying: I'm ready to work on ${selectedTask.title
       <TerminalHeader
         terminalId={id}
         isCLIMode={terminal?.isCLIMode || false}
+        engine={terminal?.engine}
         tasks={tasks}
         associatedTask={associatedTask}
         onClose={onClose}

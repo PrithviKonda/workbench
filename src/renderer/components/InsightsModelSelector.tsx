@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, ChevronDown } from 'lucide-react';
 import {
@@ -13,13 +13,15 @@ import {
 } from './ui/dropdown-menu';
 import { cn } from '../lib/utils';
 import { DEFAULT_AGENT_PROFILES, AVAILABLE_MODELS, THINKING_LEVELS } from '../../shared/constants';
-import type { InsightsModelConfig } from '../../shared/types';
+import type { CodexModelsInfo, InsightsModelConfig } from '../../shared/types';
 import { CustomModelModal } from './CustomModelModal';
 
 interface InsightsModelSelectorProps {
   currentConfig?: InsightsModelConfig;
   onConfigChange: (config: InsightsModelConfig) => void;
   disabled?: boolean;
+  /** 'codex' (the ChatGPT page) lists Codex's models instead of Claude's */
+  engine?: 'claude' | 'codex';
 }
 
 type ThinkingLevel = InsightsModelConfig['thinkingLevel'];
@@ -38,22 +40,37 @@ function shortModelLabel(model: string): string {
 export function InsightsModelSelector({
   currentConfig,
   onConfigChange,
-  disabled
+  disabled,
+  engine = 'claude'
 }: InsightsModelSelectorProps) {
   const { t } = useTranslation('common');
   const [showCustomModal, setShowCustomModal] = useState(false);
+  const [codexModels, setCodexModels] = useState<CodexModelsInfo['models']>([]);
+
+  useEffect(() => {
+    if (engine !== 'codex') return;
+    window.electronAPI.getCodexModels()
+      .then((result) => setCodexModels(result.success && result.data ? result.data.models : []))
+      .catch(() => setCodexModels([]));
+  }, [engine]);
 
   // Resolve the effective model/effort: an explicit config wins, otherwise the Balanced profile
   const balanced = DEFAULT_AGENT_PROFILES.find((p) => p.id === 'balanced');
   const profile = DEFAULT_AGENT_PROFILES.find((p) => p.id === currentConfig?.profileId && p.id !== 'auto');
-  const activeModel: string = currentConfig?.model ?? profile?.model ?? balanced?.model ?? 'sonnet';
+  const configuredModel: string = currentConfig?.model ?? profile?.model ?? balanced?.model ?? 'sonnet';
+  // A Claude tier on the ChatGPT page runs as Codex's top model (codexModelFor)
+  const activeModel = engine === 'codex' && !codexModels.some((m) => m.slug === configuredModel)
+    ? codexModels[0]?.slug ?? configuredModel
+    : configuredModel;
+  const modelLabel = (model: string) =>
+    engine === 'codex' ? codexModels.find((m) => m.slug === model)?.displayName ?? model : shortModelLabel(model);
   const activeThinking: ThinkingLevel = currentConfig?.thinkingLevel ?? profile?.thinkingLevel ?? balanced?.thinkingLevel ?? 'medium';
 
   const isKnownModel = AVAILABLE_MODELS.some((m) => m.value === activeModel);
   const moreModels = AVAILABLE_MODELS.filter((m) => !(PRIMARY_MODELS as readonly string[]).includes(m.value));
 
   const select = (model: string, thinkingLevel: ThinkingLevel) => {
-    onConfigChange({ profileId: 'custom', model: model as InsightsModelConfig['model'], thinkingLevel });
+    onConfigChange({ ...currentConfig, profileId: 'custom', model: model as InsightsModelConfig['model'], thinkingLevel });
   };
 
   const effortLabel = (level: ThinkingLevel) => t(`insights.model.effortLevels.${level}`);
@@ -69,16 +86,25 @@ export function InsightsModelSelector({
             type="button"
             className="inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-sm text-foreground transition-colors hover:bg-nav-hover focus-visible:outline-none focus-visible:shadow-(--shadow-focus) disabled:pointer-events-none disabled:opacity-50 data-[state=open]:bg-nav-hover"
             disabled={disabled}
-            title={t('insights.model.title', { name: `${shortModelLabel(activeModel)} · ${effortLabel(activeThinking)}` })}
+            title={t('insights.model.title', { name: `${modelLabel(activeModel)} · ${effortLabel(activeThinking)}` })}
           >
-            <span className="truncate">{shortModelLabel(activeModel)}</span>
+            <span className="truncate">{modelLabel(activeModel)}</span>
             <span className="truncate text-muted-foreground">{effortLabel(activeThinking)}</span>
             <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           </button>
         </DropdownMenuTrigger>
 
         <DropdownMenuContent align="end" sideOffset={6} className="w-80 rounded-xl p-1.5">
-          {PRIMARY_MODELS.map((model) => (
+          {engine === 'codex' ? codexModels.map((model) => (
+            <DropdownMenuItem
+              key={model.slug}
+              onSelect={() => select(model.slug, activeThinking)}
+              className={cn(menuItemClass, 'flex items-center text-sm')}
+            >
+              <span className="min-w-0 flex-1 truncate">{model.displayName}</span>
+              {renderCheck(activeModel === model.slug)}
+            </DropdownMenuItem>
+          )) : PRIMARY_MODELS.map((model) => (
             <DropdownMenuItem
               key={model}
               onSelect={() => select(model, activeThinking)}
@@ -117,10 +143,9 @@ export function InsightsModelSelector({
             </DropdownMenuSubContent>
           </DropdownMenuSub>
 
-          <DropdownMenuSeparator className="mx-2 my-1.5" />
-
           {/* Other Claude models and the custom (multi-provider) picker */}
-          <DropdownMenuSub>
+          {engine !== 'codex' && <DropdownMenuSeparator className="mx-2 my-1.5" />}
+          {engine !== 'codex' && <DropdownMenuSub>
             <DropdownMenuSubTrigger className={cn(menuItemClass, 'flex h-10 items-center text-sm')}>
               <span className="flex-1">{t('insights.model.moreModels')}</span>
             </DropdownMenuSubTrigger>
@@ -147,7 +172,7 @@ export function InsightsModelSelector({
                 {renderCheck(!isKnownModel)}
               </DropdownMenuItem>
             </DropdownMenuSubContent>
-          </DropdownMenuSub>
+          </DropdownMenuSub>}
         </DropdownMenuContent>
       </DropdownMenu>
 

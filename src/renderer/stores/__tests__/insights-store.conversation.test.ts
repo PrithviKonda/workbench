@@ -6,7 +6,7 @@
  * main process emits (stream chunks, status, error, session-updated) and check the UI state.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { InsightsChatStatus, InsightsSession, InsightsStreamChunk } from '../../../shared/types';
+import type { InsightsChatStatus, InsightsModelConfig, InsightsSession, InsightsStreamChunk } from '../../../shared/types';
 
 type ChunkListener = (projectId: string, chunk: InsightsStreamChunk) => void;
 type StatusListener = (projectId: string, status: InsightsChatStatus) => void;
@@ -187,5 +187,16 @@ describe('Insights mock conversations', () => {
 
     expect(state().session?.id).toBe('session-new');
     expect(state().status.phase).toBe('idle');
+  });
+});
+
+describe('sessionsForEngine', () => {
+  it('splits chats between the Claude page (no engine) and the ChatGPT page', async () => {
+    const { sessionsForEngine } = await import('../insights-store');
+    const claude = { id: 'a', modelConfig: { profileId: 'balanced', model: 'sonnet', thinkingLevel: 'medium' as const } };
+    const unset: { id: string; modelConfig?: InsightsModelConfig } = { id: 'b' };
+    const codex = { id: 'c', modelConfig: { profileId: 'balanced', model: 'opus', thinkingLevel: 'medium' as const, engine: 'codex' as const } };
+    expect(sessionsForEngine([claude, unset, codex], 'claude').map((s) => s.id)).toEqual(['a', 'b']);
+    expect(sessionsForEngine([claude, unset, codex], 'codex').map((s) => s.id)).toEqual(['c']);
   });
 });

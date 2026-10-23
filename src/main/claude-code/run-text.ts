@@ -7,9 +7,9 @@
  * is not saved as a session. Tools are off unless the caller asks for read-only exploration.
  */
 
-import { resolveClaudeEnv } from './env';
+import { resolveClaudeEnv, type EngineKind } from './env';
 import { startClaudeProcess } from './process';
-import type { ClaudeEffort, ClaudeModelAlias, RouteStep } from '../../shared/types/claude-code';
+import { isClaudeModel, type ClaudeEffort, type ClaudeModelAlias, type RouteStep } from '../../shared/types/claude-code';
 import { routeFor } from './routing';
 import type { ClaudeUserContentBlock } from './stream-types';
 
@@ -41,6 +41,8 @@ export interface RunClaudeTextOptions {
   profileId?: string;
   /** Kind of work, so Settings > Agents > Model routing can pick the engine, model and effort */
   step?: RouteStep;
+  /** Run on this engine; a route for the other engine (or its model) is then ignored */
+  engine?: EngineKind;
   /** The task's spec dir, for routes that differ by task size */
   specDir?: string;
 }
@@ -62,10 +64,15 @@ class ClaudeCodeRunError extends Error {
 
 /** Run Claude Code once and return its answer */
 export async function runClaudeText(options: RunClaudeTextOptions): Promise<RunClaudeTextResult> {
-  const route = options.step ? await routeFor(options.step, options.specDir) : {};
+  const routed = options.step ? await routeFor(options.step, options.specDir) : {};
+  const otherEngine = options.engine && (
+    (routed.engine && routed.engine !== options.engine)
+    || (routed.model && isClaudeModel(routed.model) !== (options.engine === 'claude'))
+  );
+  const route = otherEngine ? {} : routed;
   const model = route.model ?? options.model ?? 'haiku';
   const effort = route.effort ?? options.effort;
-  const { command, env, engine } = await resolveClaudeEnv({ profileId: options.profileId, engine: route.engine });
+  const { command, env, engine } = await resolveClaudeEnv({ profileId: options.profileId, engine: options.engine ?? route.engine });
   const tools = options.tools ?? [];
   const usesContentBlocks = typeof options.prompt !== 'string';
 

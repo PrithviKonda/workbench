@@ -104,7 +104,7 @@ export function registerTerminalHandlers(
 
   ipcMain.on(
     IPC_CHANNELS.TERMINAL_INVOKE_CLI,
-    (_, id: string, cwd?: string) => {
+    (_, id: string, cwd?: string, engine?: 'claude' | 'codex') => {
       // Wrap in async IIFE to allow async settings read without blocking
       (async () => {
         // Read settings asynchronously to check for YOLO mode (dangerously skip permissions)
@@ -112,7 +112,7 @@ export function registerTerminalHandlers(
         const dangerouslySkipPermissions = settings?.dangerouslySkipPermissions === true;
 
         // Use async version to avoid blocking main process during CLI detection
-        await terminalManager.invokeCLIAsync(id, cwd, undefined, dangerouslySkipPermissions);
+        await terminalManager.invokeCLIAsync(id, cwd, undefined, dangerouslySkipPermissions, engine === 'claude' || engine === 'codex' ? engine : undefined);
       })().catch((error) => {
         console.warn('[terminal-handlers] Failed to invoke Claude:', error);
       });

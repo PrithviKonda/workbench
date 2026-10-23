@@ -16,6 +16,7 @@ import { appLog } from '../app-logger';
 import { getClaudeProfileManager } from '../claude-profile-manager';
 import { expandHomePath } from '../claude-profile/profile-utils';
 import { getDefaultClaudeConfigDir } from '../claude-profile/config-dir-paths';
+import { defaultCodexHome, listCodexAccounts } from '../claude-profile/codex-accounts';
 import { isWindows } from '../platform';
 import { getWslInfo } from '../platform/shell-runtime';
 import { createRelayWorker } from './create-relay-worker';
@@ -79,6 +80,17 @@ function getClaudeConfigDirs(): string[] {
     appLog.warn('[LiveAgent] Could not read the Claude profiles:', error);
   }
   return [...new Set(dirs)];
+}
+
+/** Codex homes whose rollouts are watched: the default one and each signed-in Codex account's */
+function getCodexHomes(): string[] {
+  const homes = [defaultCodexHome()];
+  try {
+    for (const account of listCodexAccounts()) if (account.configDir) homes.push(account.configDir);
+  } catch (error) {
+    appLog.warn('[LiveAgent] Could not read the Codex accounts:', error);
+  }
+  return [...new Set(homes.map((home) => path.resolve(home)))];
 }
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -146,7 +158,7 @@ export class LiveAgentRelay {
       // A reload unmounts the graphs without unsubscribing
       webContents.on('did-start-loading', drop);
     }
-    this.post({ type: 'subscribe', clientId: key, cwd, flowDir, claudeDirs: getClaudeConfigDirs() });
+    this.post({ type: 'subscribe', clientId: key, cwd, flowDir, claudeDirs: getClaudeConfigDirs(), codexHomes: getCodexHomes() });
   }
 
   unsubscribe(webContents: WebContents, clientId: string): void {
@@ -301,9 +313,10 @@ export class LiveAgentRelay {
     });
 
     const claudeDirs = getClaudeConfigDirs();
-    this.post({ type: 'start', claudeDirs });
+    const codexHomes = getCodexHomes();
+    this.post({ type: 'start', claudeDirs, codexHomes });
     for (const [key, subscription] of this.subscriptions) {
-      this.post({ type: 'subscribe', clientId: key, cwd: subscription.cwd, flowDir: subscription.flowDir, claudeDirs });
+      this.post({ type: 'subscribe', clientId: key, cwd: subscription.cwd, flowDir: subscription.flowDir, claudeDirs, codexHomes });
     }
   }
 

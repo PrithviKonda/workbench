@@ -18,6 +18,8 @@ export interface InsightsModelConfig {
   thinkingLevel: ThinkingLevel;
   /** The Kanban button: Claude gets the project's task tools in this conversation */
   kanbanTools?: boolean;
+  /** Which page the chat belongs to: the Claude page (missing) or the ChatGPT page ('codex') */
+  engine?: 'claude' | 'codex';
 }
 
 type InsightsChatRole = 'user' | 'assistant';

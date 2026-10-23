@@ -17,6 +17,7 @@ import {
   CornerDownLeft,
   ChevronDown,
   Paperclip,
+  MessageSquare,
   X
 } from 'lucide-react';
 import { MarkdownContent } from './ui/markdown-content';
@@ -36,6 +37,8 @@ import {
   unarchiveSession,
   updateModelConfig,
   createTaskFromSuggestion,
+  sessionEngine,
+  sessionsForEngine,
   loadInsightsSessions
 } from '../stores/insights-store';
 import { useImageUpload } from './task-form/useImageUpload';
@@ -52,12 +55,16 @@ import {
 
 interface InsightsProps {
   projectId: string;
+  /** 'codex': the ChatGPT page, with its own chats and Codex's models */
+  engine?: 'claude' | 'codex';
 }
 
-export function Insights({ projectId }: InsightsProps) {
+export function Insights({ projectId, engine = 'claude' }: InsightsProps) {
   const { t, i18n } = useTranslation('common');
+  const assistantName = t(engine === 'codex' ? 'navigation:items.chatgpt' : 'navigation:items.insights');
   const session = useInsightsStore((state) => state.session);
-  const sessions = useInsightsStore((state) => state.sessions);
+  const allSessions = useInsightsStore((state) => state.sessions);
+  const sessions = sessionsForEngine(allSessions, engine);
   const status = useInsightsStore((state) => state.status);
   const streamingContent = useInsightsStore((state) => state.streamingContent);
   const currentTool = useInsightsStore((state) => state.currentTool);
@@ -81,7 +88,8 @@ export function Insights({ projectId }: InsightsProps) {
 
   // Model choice made before a session exists (or before it is persisted); the session's own config wins
   const [draftModelConfig, setDraftModelConfig] = useState<InsightsModelConfig | undefined>(undefined);
-  const effectiveModelConfig = session?.modelConfig ?? draftModelConfig;
+  // Claude page chats carry no engine, so model routing can still move them to Codex
+  const effectiveModelConfig = withEngine(session?.modelConfig ?? draftModelConfig, engine);
 
   const isLoading = status.phase === 'thinking' || status.phase === 'streaming';
 
@@ -137,8 +145,15 @@ export function Insights({ projectId }: InsightsProps) {
   }, [viewportEl, handleScroll, checkIfAtBottom]);
 
   // Load the project's session on mount (IPC listeners are registered app-wide in useIpcListeners)
+  // then move to this page's newest chat (or a new one) when the current chat belongs to the other page
   useEffect(() => {
-    loadInsightsSession(projectId, showArchived);
+    void loadInsightsSession(projectId, showArchived).then(async () => {
+      const state = useInsightsStore.getState();
+      if (state.session && sessionEngine(state.session.modelConfig) === engine) return;
+      const newest = sessionsForEngine(state.sessions, engine).find((s) => !s.archivedAt);
+      if (newest) await switchSession(projectId, newest.id);
+      else await startSession();
+    });
   }, [projectId]);
 
   // Reload sessions when showArchived changes (skip first run to avoid duplicate load with mount effect)
@@ -190,8 +205,16 @@ export function Insights({ projectId }: InsightsProps) {
     }
   };
 
-  const handleNewSession = async () => {
+  // A new chat; on the ChatGPT page it is marked as Codex right away
+  const startSession = async () => {
     await newSession(projectId);
+    const created = useInsightsStore.getState().session;
+    const config = withEngine(created?.modelConfig ?? draftModelConfig, engine);
+    if (created && config) await updateModelConfig(projectId, created.id, config);
+  };
+
+  const handleNewSession = async () => {
+    await startSession();
     setTaskCreated(new Set());
     textareaRef.current?.focus();
   };
@@ -311,12 +334,7 @@ export function Insights({ projectId }: InsightsProps) {
   // conversation's model settings)
   const kanbanTools = effectiveModelConfig?.kanbanTools === true;
   const toggleKanbanTools = () => {
-    const balanced = DEFAULT_AGENT_PROFILES.find((profile) => profile.id === 'balanced');
-    const base: InsightsModelConfig = effectiveModelConfig ?? {
-      profileId: 'balanced',
-      model: balanced?.model ?? 'sonnet',
-      thinkingLevel: balanced?.thinkingLevel ?? 'medium',
-    };
+    const base: InsightsModelConfig = effectiveModelConfig ?? defaultModelConfig(engine);
     void handleModelConfigChange({ ...base, kanbanTools: !kanbanTools });
   };
   const kanbanButton = (
@@ -338,7 +356,7 @@ export function Insights({ projectId }: InsightsProps) {
           {t('insights.kanbanTools.label')}
         </button>
       </TooltipTrigger>
-      <TooltipContent>{t(kanbanTools ? 'insights.kanbanTools.on' : 'insights.kanbanTools.off')}</TooltipContent>
+      <TooltipContent>{t(kanbanTools ? 'insights.kanbanTools.on' : 'insights.kanbanTools.off', { name: assistantName })}</TooltipContent>
     </Tooltip>
   );
 
@@ -347,6 +365,7 @@ export function Insights({ projectId }: InsightsProps) {
       currentConfig={effectiveModelConfig}
       onConfigChange={handleModelConfigChange}
       disabled={isLoading}
+      engine={engine}
     />
   );
 
@@ -565,7 +584,9 @@ export function Insights({ projectId }: InsightsProps) {
           <div className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto px-4">
             <div className="flex w-full max-w-[672px] flex-1 flex-col justify-center pb-[12vh]">
               <h1 className="mb-8 flex items-center justify-center gap-3 text-center font-heading text-[2.125rem] font-normal! leading-tight tracking-tight text-foreground">
-                <SparkMark className="h-9 w-9 shrink-0" />
+                {engine === 'codex'
+                  ? <MessageSquare className="h-9 w-9 shrink-0" strokeWidth={1.5} aria-hidden="true" />
+                  : <SparkMark className="h-9 w-9 shrink-0" />}
                 <span>{t(greetingKey)}</span>
               </h1>
 
@@ -624,7 +645,7 @@ export function Insights({ projectId }: InsightsProps) {
                 {/* Under the field: attach, disclaimer, model */}
                 <div className="mt-1.5 grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-sm">
                   <div className="flex items-center gap-1">{attachButton}{kanbanButton}</div>
-                  <span className="truncate text-xs text-muted-foreground">{t('insights.disclaimer')}</span>
+                  <span className="truncate text-xs text-muted-foreground">{t('insights.disclaimer', { name: assistantName })}</span>
                   <div className="flex justify-end">{modelSelector}</div>
                 </div>
               </div>
@@ -640,6 +661,23 @@ export function Insights({ projectId }: InsightsProps) {
       />
     </div>
   );
+}
+
+/** The Balanced profile's model and effort; on the ChatGPT page 'opus' runs as Codex's top model */
+function defaultModelConfig(engine: 'claude' | 'codex'): InsightsModelConfig {
+  const balanced = DEFAULT_AGENT_PROFILES.find((profile) => profile.id === 'balanced');
+  return {
+    profileId: 'balanced',
+    model: engine === 'codex' ? 'opus' : balanced?.model ?? 'sonnet',
+    thinkingLevel: balanced?.thinkingLevel ?? 'medium',
+    ...(engine === 'codex' ? { engine } : {}),
+  };
+}
+
+/** A ChatGPT page config always says 'codex', so its chats never end up on the Claude page */
+function withEngine(config: InsightsModelConfig | undefined, engine: 'claude' | 'codex'): InsightsModelConfig | undefined {
+  if (engine !== 'codex') return config;
+  return { ...(config ?? defaultModelConfig(engine)), engine };
 }
 
 // Claude symbol (Wikimedia Commons "Claude_AI_symbol.svg"), drawn in the brand clay colour

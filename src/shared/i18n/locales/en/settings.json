@@ -599,6 +599,8 @@
       "title": "AI engine",
       "label": "Agent CLI",
       "description": "Runs tasks, the Claude page, agent windows and naming. Automatic uses Claude Code when a Claude account is signed in, otherwise Codex with a ChatGPT or OpenAI account",
+      "crossEngineAsk": "Let Claude and ChatGPT consult each other",
+      "crossEngineAskDescription": "A task can ask the other engine for a read-only second opinion, up to 3 times per step. Needs both engines set up",
       "options": {
         "auto": "Automatic",
         "claude": "Claude Code",

@@ -43,6 +43,8 @@ export interface ClaudeCodeTaskSettings {
   modelRouting?: ModelRouting;
   /** The user's own instructions, added to every task's and the Claude page's system prompt (both engines) */
   customInstructions?: string;
+  /** Let a task run ask the other engine for a second opinion (unset: on when both engines are set up) */
+  crossEngineAsk?: boolean;
 }
 
 // =============================================================================
@@ -136,6 +138,8 @@ export interface ClaudeRunPhase {
   startedAt: string;
   endedAt?: string;
   costUsd?: number;
+  /** Part of costUsd spent on the other engine's second opinions (not part of the session's own cost) */
+  secondOpinionCostUsd?: number;
   durationMs?: number;
   numTurns?: number;
   isError?: boolean;

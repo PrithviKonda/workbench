@@ -14,9 +14,14 @@
  */
 
 import { app } from 'electron';
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync, openSync, readSync, closeSync } from 'fs';
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync, openSync, readSync, closeSync, promises as fsp } from 'fs';
 import os from 'os';
 import path from 'path';
+import { createInterface } from 'readline';
+import { dayOf, type SessionSpending } from '../claude-code/session-spending';
+import { requestCostUsd } from '../claude-code/session-pricing';
+import type { FindProjectSessionsOptions, ProjectSession } from '../claude-code/project-sessions';
+import { belongsToProject } from '../self-improve/transcripts';
 import type { ClaudeProfile, ProfileUsageSummary } from '../../shared/types/agent';
 import { getBestAvailableProfile as pickBest } from './profile-scorer';
 import { recordRateLimitEvent, isProfileRateLimited } from './rate-limit-manager';
@@ -317,6 +322,129 @@ export function readCodexThreadUsage(home: string, threadId: string): { input_to
     // Unreadable session file
   }
   return null;
+}
+
+interface CodexTokenTotals { input_tokens?: number; cached_input_tokens?: number; output_tokens?: number }
+
+/**
+ * What one Codex thread spent, and on which local days, from its rollout file. Each `token_count`
+ * line carries the thread's running totals, so the growth since the line before is what that turn
+ * cost, priced at the model the latest `turn_context` named. OpenAI counts cached input inside
+ * `input_tokens`, so it is split out to be priced as a cache read.
+ */
+export async function readCodexRolloutSpending(file: string): Promise<SessionSpending> {
+  const spending: SessionSpending = { totalCostUsd: 0, byDay: new Map() };
+  const reader = createInterface({ input: createReadStream(file, { encoding: 'utf-8' }), crlfDelay: Infinity });
+  let model: string | undefined;
+  let last = { input: 0, cached: 0, output: 0 };
+
+  for await (const line of reader) {
+    const isTurn = line.includes('"turn_context"');
+    if (!isTurn && !line.includes('"token_count"')) continue;
+    let record: { timestamp?: string; type?: string; payload?: { type?: string; model?: string; info?: { total_token_usage?: CodexTokenTotals } | null } };
+    try {
+      record = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (isTurn && record.type === 'turn_context') {
+      if (record.payload?.model) model = record.payload.model;
+      continue;
+    }
+    const totals = record.type === 'event_msg' && record.payload?.type === 'token_count' ? record.payload.info?.total_token_usage : undefined;
+    if (!totals) continue;
+
+    const now = { input: totals.input_tokens ?? 0, cached: totals.cached_input_tokens ?? 0, output: totals.output_tokens ?? 0 };
+    // ponytail: a total that went down means the counter restarted, so it is all new spending
+    const restarted = now.input < last.input || now.cached < last.cached || now.output < last.output;
+    const base = restarted ? { input: 0, cached: 0, output: 0 } : last;
+    last = now;
+    const input = now.input - base.input;
+    const cached = now.cached - base.cached;
+    const costUsd = requestCostUsd(model, {
+      input_tokens: Math.max(0, input - cached),
+      cache_read_input_tokens: cached,
+      output_tokens: now.output - base.output,
+    });
+    const day = dayOf(record.timestamp);
+    if (!costUsd || !day) continue;
+    spending.totalCostUsd += costUsd;
+    spending.byDay.set(day, (spending.byDay.get(day) ?? 0) + costUsd);
+  }
+  return spending;
+}
+
+/** The thread id a rollout file is named after (`rollout-<time>-<threadId>.jsonl`) */
+const ROLLOUT_NAME = /(?:^|[\\/])rollout-.*-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i;
+
+/** The directory each rollout ran in, by path, read again only when the file changes */
+const rolloutCwds = new Map<string, { modifiedMs: number; cwd: string | null }>();
+
+/** `session_meta.payload.cwd` from a rollout's first line */
+async function readRolloutCwd(file: string): Promise<string | null> {
+  const reader = createInterface({ input: createReadStream(file, { encoding: 'utf-8' }), crlfDelay: Infinity });
+  try {
+    for await (const line of reader) {
+      const record = JSON.parse(line) as { type?: string; payload?: { cwd?: unknown } };
+      return record.type === 'session_meta' && typeof record.payload?.cwd === 'string' ? record.payload.cwd : null;
+    }
+  } catch {
+    // Unreadable or not JSON
+  } finally {
+    reader.close();
+  }
+  return null;
+}
+
+/**
+ * Every Codex thread that ran in a project, from every Codex home, newest first. The counterpart
+ * of `findProjectSessions` for Claude Code, with the Codex home as `configDir` and the thread id as
+ * `sessionId`. A thread resumed on another account has a copy in both homes; the newest counts.
+ */
+export async function findCodexProjectSessions(
+  projectPath: string,
+  options: FindProjectSessionsOptions & { homes?: string[] } = {}
+): Promise<ProjectSession[]> {
+  const homes = options.homes ?? [...new Set([...listCodexAccounts().map((account) => account.configDir!), defaultCodexHome()])];
+  const found = new Map<string, ProjectSession>();
+
+  for (const home of homes) {
+    const root = path.join(home, 'sessions');
+    let entries: string[];
+    try {
+      entries = await fsp.readdir(root, { recursive: true });
+    } catch {
+      // This home has no sessions
+      continue;
+    }
+
+    for (const entry of entries) {
+      const sessionId = ROLLOUT_NAME.exec(entry)?.[1];
+      if (!sessionId || options.skip?.has(sessionId)) continue;
+      const file = path.join(root, entry);
+      try {
+        const stats = await fsp.stat(file);
+        if (!stats.isFile() || stats.size === 0) continue;
+        const known = found.get(sessionId);
+        if (known && known.modifiedMs >= stats.mtimeMs) continue;
+
+        let cached = rolloutCwds.get(file);
+        if (cached?.modifiedMs !== stats.mtimeMs) {
+          cached = { modifiedMs: stats.mtimeMs, cwd: await readRolloutCwd(file) };
+          rolloutCwds.set(file, cached);
+        }
+        const cwd = cached.cwd;
+        if (!cwd || !belongsToProject(cwd, projectPath)) continue;
+        if (options.skipUnder?.some((directory) => belongsToProject(cwd, directory))) continue;
+
+        found.set(sessionId, { sessionId, configDir: home, cwd, file, size: stats.size, modifiedMs: stats.mtimeMs });
+      } catch {
+        // Removed or unreadable while the folder was being read
+      }
+    }
+  }
+
+  return [...found.values()].sort((a, b) => b.modifiedMs - a.modifiedMs);
 }
 
 /** Last part of a file (session files grow large; the newest limits are at the end) */

@@ -224,8 +224,9 @@ export async function restoreTerminal(
     return { success: false, error: 'Terminal not found after creation' };
   }
 
-  // Restore title and worktree config from session
+  // Restore title, the window's CLI and worktree config from session
   terminal.title = session.title;
+  terminal.engine = storedSession?.engine ?? session.engine;
   // Only restore worktree config if the worktree directory still exists
   // (effectiveCwd matching session.cwd means no fallback was needed)
   // Use storedWorktreeConfig (from disk) as the authoritative source

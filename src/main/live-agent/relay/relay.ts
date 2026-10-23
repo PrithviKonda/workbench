@@ -14,6 +14,7 @@ import { TranscriptParser, isActivityLine } from './lib/transcript-parser'
 import { readCompleteLines, readNewFileLines, foldPathCase } from './lib/fs-utils'
 import { createLogger } from './lib/logger'
 import { scanSubagentsDir, readSubagentNewLines, stopTailing } from './lib/subagent-watcher'
+import { isCodexRollout, codexRolloutThreadId, codexRolloutLineToTranscript } from './lib/codex-rollout'
 import { isWslUncPath, windowsToWsl, wslToWindows, type WslPathOptions } from '../../platform/wsl-paths'
 import {
   INACTIVITY_TIMEOUT_MS, BUSY_INACTIVITY_TIMEOUT_MS, SCAN_INTERVAL_MS, ACTIVE_SESSION_AGE_S, POLL_FALLBACK_MS,
@@ -25,6 +26,14 @@ const log = createLogger('Relay')
 /** The `projects` dirs of the Claude Code config dirs whose sessions are watched
  *  (~/.claude and each Claude account's CLAUDE_CONFIG_DIR) */
 const claudeProjectDirs: string[] = []
+
+/** The `sessions` dirs of the Codex homes whose rollouts are watched (~/.codex and each Codex account's) */
+const codexSessionDirs: string[] = []
+
+/** A session file's lines as transcript lines: a Codex rollout's are translated */
+function transcriptLines(filePath: string, lines: string[]): string[] {
+  return isCodexRollout(filePath) ? lines.flatMap(codexRolloutLineToTranscript) : lines
+}
 
 /** The WSL distribution Claude Code runs in (Windows with the WSL shell), else null: its
  *  sessions record Linux working directories and live in Linux-named project dirs */
@@ -338,7 +347,7 @@ function watchSession(sessionId: string, filePath: string, lastActivity: number,
     subagentsDir: path.join(path.dirname(filePath), sessionId, 'subagents'),
   }
   sessions.set(sessionId, session)
-  parser.prescanExistingContent(existing.lines, session)
+  parser.prescanExistingContent(transcriptLines(filePath, existing.lines), session)
 
   broadcastSessionStarted(sessionId)
   broadcastEvent({
@@ -400,7 +409,7 @@ function readNewLines(sessionId: string) {
   const result = readNewFileLines(session.filePath, session.fileSize)
   if (!result) return
   session.fileSize = result.newSize
-  for (const line of result.lines) {
+  for (const line of transcriptLines(session.filePath, result.lines)) {
     // Only the agent working reopens a closed session (not a title, a queue
     // entry or a local command), and it's reopened before that work is shown
     if (session.sessionCompleted && isActivityLine(line)) resumeSession(session)
@@ -484,7 +493,7 @@ function hasActivitySinceDisposed(filePath: string): boolean {
   try {
     const read = readCompleteLines(filePath, offset, fs.statSync(filePath).size)
     disposedOffsets.set(filePath, read.nextOffset)
-    if (!read.lines.some(isActivityLine)) return false
+    if (!transcriptLines(filePath, read.lines).some(isActivityLine)) return false
   } catch { return false /* unreadable right now; the next scan retries */ }
   disposedOffsets.delete(filePath)
   return true
@@ -589,6 +598,17 @@ function scanForActiveSessions(workspace: Workspace) {
     }
   }
 
+  // Codex rollouts of today and yesterday (a session past midnight stays in its first day's
+  // folder), found by their recorded cwd; the periodic scan picks up new ones
+  for (const sessionsDir of codexSessionDirs) {
+    for (const daysAgo of [0, 1]) {
+      const day = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000)
+      const dayDir = path.join(sessionsDir, String(day.getFullYear()),
+        String(day.getMonth() + 1).padStart(2, '0'), String(day.getDate()).padStart(2, '0'))
+      if (fs.existsSync(dayDir)) dirsToScan.push(dayDir)
+    }
+  }
+
   // Start watching in order of last activity, so the most recent session is
   // announced last and is the one clients end up showing
   const found: Array<{ sessionId: string; filePath: string; newestMtime: number }> = []
@@ -596,8 +616,8 @@ function scanForActiveSessions(workspace: Workspace) {
     try {
       for (const file of fs.readdirSync(dirPath)) {
         if (!file.endsWith('.jsonl')) continue
-        const sessionId = path.basename(file, '.jsonl')
-        if (sessions.has(sessionId)) continue
+        const sessionId = isCodexRollout(file) ? codexRolloutThreadId(file) : path.basename(file, '.jsonl')
+        if (!sessionId || sessions.has(sessionId)) continue
         const filePath = path.join(dirPath, file)
         const stat = fs.statSync(filePath)
         let newestMtime = stat.mtimeMs
@@ -679,6 +699,8 @@ export interface Relay {
   unsubscribe: (clientId: string) => void
   /** Watch the sessions of these Claude Code config dirs too */
   addClaudeDirs: (dirs: string[]) => void
+  /** Watch the rollouts of these Codex homes too */
+  addCodexHomes: (homes: string[]) => void
   /** Clean up all resources */
   dispose: () => void
 }
@@ -687,6 +709,8 @@ interface RelayOptions {
   /** Claude Code config dirs (~/.claude, CLAUDE_CONFIG_DIR): each has a
    *  `projects` dir of session transcripts */
   claudeDirs: string[]
+  /** Codex homes ($CODEX_HOME): each has a `sessions` dir of rollouts */
+  codexHomes?: string[]
   send: SendFn
   /** The WSL distribution Claude Code runs in, when it runs in one */
   wsl?: WslPathOptions | null
@@ -708,10 +732,18 @@ function addClaudeDirs(dirs: string[]) {
   }
 }
 
+function addCodexHomes(homes: string[]) {
+  for (const home of homes) {
+    const sessionsDir = path.join(path.resolve(home), 'sessions')
+    if (!codexSessionDirs.includes(sessionsDir)) codexSessionDirs.push(sessionsDir)
+  }
+}
+
 export async function createRelay(options: RelayOptions): Promise<Relay> {
   sendToClients = options.send
   wsl = options.wsl ?? null
   addClaudeDirs(options.claudeDirs)
+  addCodexHomes(options.codexHomes ?? [])
 
   const hookServer = new HookServer()
   const hookPort = await hookServer.start()
@@ -791,6 +823,10 @@ export async function createRelay(options: RelayOptions): Promise<Relay> {
       addClaudeDirs(dirs)
     },
 
+    addCodexHomes(homes: string[]) {
+      addCodexHomes(homes)
+    },
+
     dispose() {
       if (relayDisposed) return
       relayDisposed = true
@@ -803,6 +839,7 @@ export async function createRelay(options: RelayOptions): Promise<Relay> {
       for (const id of [...sessions.keys()]) disposeSession(id)
       sessionOwners.clear()
       clients.clear()
+      codexSessionDirs.length = 0
       sendToClients = () => {}
     },
   }

@@ -118,6 +118,7 @@ export class InsightsExecutor extends EventEmitter {
           graphify,
           profileId: projectSettings?.claudeProfileId,
           taskTools: taskTools?.mcpServer,
+          engine: modelConfig?.engine,
         },
         (event) => {
           switch (event.type) {

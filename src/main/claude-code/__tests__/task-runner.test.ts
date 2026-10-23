@@ -13,6 +13,7 @@ vi.mock('../env', () => ({
     env: { ...(options?.extraEnv ?? {}) },
   })),
   pickEngine: vi.fn(async () => 'claude'),
+  engineCanRun: vi.fn(async () => false),
 }));
 
 /** Scripted Claude Code runs: one entry per spawned process */
@@ -52,7 +53,16 @@ vi.mock('../triage', async (importOriginal) => {
   return { ...actual, triageTask: (...args: unknown[]) => triageMock(...args) };
 });
 
+const askMock = vi.hoisted(() => vi.fn());
+vi.mock('../run-text', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../run-text')>();
+  return { ...actual, runClaudeText: (...args: unknown[]) => askMock(...args) };
+});
+
 import { ClaudeTaskRun, loadClaudeRunInfo } from '../task-runner';
+import { engineCanRun } from '../env';
+import { startClaudeProcess } from '../process';
+import { closeTaskToolsServer } from '../../insights/task-tools-server';
 import { SELF_IMPROVE_NUDGE } from '../../self-improve/nudge';
 
 function result(sessionId: string, fields: Record<string, unknown> = {}): ClaudeStreamMessage {
@@ -168,6 +178,41 @@ describe('ClaudeTaskRun', () => {
     expect(info.phases.map((p) => p.costUsd)).toEqual([0.01, 0.2, 0.3, expect.closeTo(0.1, 5)]);
     expect(info.totalCostUsd).toBeCloseTo(0.61, 5);
     expect(existsSync(path.join(specDir, 'task_logs.json'))).toBe(true);
+  });
+
+  it('lets the session ask the other engine and adds the answer to the phase cost', async () => {
+    triageMock.mockResolvedValue({ triage: triage() });
+    vi.mocked(engineCanRun).mockResolvedValueOnce(true);
+    askMock.mockResolvedValue({ text: 'Looks right', costUsd: 0.05 });
+    let answer: unknown;
+    vi.mocked(startClaudeProcess).mockImplementationOnce((options: ClaudeProcessOptions) => {
+      spawned.push(options);
+      const done = (async () => {
+        // The session calls the tool over Workbench's MCP server
+        const server = JSON.parse(argValue(options.args, '--mcp-config')!).mcpServers.workbench_ask;
+        const response = await fetch(server.url, {
+          method: 'POST',
+          headers: { ...server.headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'ask_codex', arguments: { question: 'Is this right?' } } }),
+        });
+        answer = await response.json();
+        const message = result('s-ask');
+        options.onMessage?.(message);
+        return { exitCode: 0, signal: null, result: message as never, stderr: '', aborted: false, timedOut: false };
+      })();
+      return { child: {}, stop: vi.fn(), done } as never;
+    });
+    const outcome = await makeRun({ settings: { ...DEFAULT_CLAUDE_CODE_TASK_SETTINGS, validation: false } }).run();
+    await closeTaskToolsServer();
+
+    expect(outcome.status).toBe('completed');
+    expect(JSON.stringify(answer)).toContain('Looks right');
+    expect(askMock.mock.calls[0][0]).toMatchObject({ engine: 'codex', cwd: worktree, tools: ['Read', 'Glob', 'Grep'] });
+    expect(spawned[0].args).toContain('mcp__workbench_ask__*');
+    expect(argValue(spawned[0].args, '--append-system-prompt')).toContain('ask_codex');
+    const implement = loadClaudeRunInfo(specDir)!.phases.find((p) => p.name === 'implement')!;
+    expect(implement.costUsd).toBeCloseTo(0.15, 5);
+    expect(implement.secondOpinionCostUsd).toBeCloseTo(0.05, 5);
   });
 
   it('skips planning and validation when not needed', async () => {

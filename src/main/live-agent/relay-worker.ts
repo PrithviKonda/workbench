@@ -24,6 +24,7 @@ if (port) {
     switch (request.type) {
       case 'subscribe':
         relay.addClaudeDirs(request.claudeDirs);
+        relay.addCodexHomes(request.codexHomes);
         relay.subscribe(request.clientId, request.cwd, request.flowDir);
         break;
       case 'unsubscribe':
@@ -38,6 +39,7 @@ if (port) {
         if (relay || stopping) return;
         createRelay({
           claudeDirs: request.claudeDirs,
+          codexHomes: request.codexHomes,
           send: (clientIds, data) => post({ type: 'message', clientIds, data }),
           wsl: (workerData as RelayWorkerData | undefined)?.wsl ?? null,
         }).then((created) => {

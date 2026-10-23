@@ -28,7 +28,7 @@ import { getShellRuntimeStatus, getWslInfo, toRuntimePath, whenShellRuntimeReady
 import { appLog } from '../app-logger';
 import { INSIGHTS_ERROR_CODES, formatInsightsError } from '../../shared/constants/insights';
 import { CLAUDE_EFFORTS, CLAUDE_MODEL_ALIASES } from '../../shared/types/claude-code';
-import type { ClaudeEffort, ClaudeModelAlias } from '../../shared/types/claude-code';
+import type { ClaudeEffort, ClaudeModelAlias, ModelRoute } from '../../shared/types/claude-code';
 import type { AppSettings, ImageAttachment } from '../../shared/types';
 import type { GraphifyAgentContext } from '../graphify';
 import { TASK_TOOLS_SERVER_NAME, toBridgeServer, type TaskToolsMcpServer, type TaskToolsStdioServer } from './task-tools-mcp';
@@ -68,6 +68,8 @@ export interface InsightsRunConfig {
   profileId?: string;
   /** MCP server entry of the turn's task tools session */
   taskTools?: TaskToolsMcpServer;
+  /** The page's engine (the ChatGPT page: 'codex'); unset = model routing decides */
+  engine?: 'claude' | 'codex';
 }
 
 /** Info about a tool call made during the turn */
@@ -128,6 +130,15 @@ export function toClaudeModel(model: string | undefined): string {
 /** Claude Code effort for a stored thinking level */
 function toClaudeEffort(level: string | undefined): ClaudeEffort {
   return level && (CLAUDE_EFFORTS as readonly string[]).includes(level) ? (level as ClaudeEffort) : 'medium';
+}
+
+/**
+ * The page's engine beats the routing's engine; the routing's model and effort only apply when
+ * its engine is the page's (or neither is set)
+ */
+export function pageRoute(route: ModelRoute, pageEngine: 'claude' | 'codex' | undefined): { route: ModelRoute; engine?: 'claude' | 'codex' } {
+  if (!pageEngine) return { route, engine: route.engine };
+  return { route: route.engine === pageEngine ? route : {}, engine: pageEngine };
 }
 
 /** MCP tools rule for Workbench's task tools (every tool of the server) */
@@ -324,8 +335,8 @@ export async function runInsights(config: InsightsRunConfig, onStream?: Insights
     await whenShellRuntimeReady();
     const wsl = getWslInfo();
     // Settings > Agents > Model routing for the Claude page (unset fields: the page's own choice)
-    const route = await routeFor('insights');
-    const { command, env, engine } = await resolveClaudeEnv({ profileId: config.profileId, engine: route.engine });
+    const { route, engine: wanted } = pageRoute(await routeFor('insights'), config.engine);
+    const { command, env, engine } = await resolveClaudeEnv({ profileId: config.profileId, engine: wanted });
     const cli = engine === 'codex' ? 'codex' : 'claude';
     const cliName = engine === 'codex' ? 'Codex CLI' : 'Claude Code CLI';
     if (wsl) {
@@ -372,7 +383,7 @@ export async function runInsights(config: InsightsRunConfig, onStream?: Insights
       const handle = startClaudeProcess({
         command,
         engine,
-        args: buildInsightsArgs(route.model ?? toClaudeModel(config.model), route.effort ?? toClaudeEffort(config.thinkingLevel), systemPromptFile, !!graphify, mcpConfigFile),
+        args: buildInsightsArgs(route.model ?? ((config.engine === 'codex' && config.model) || toClaudeModel(config.model)), route.effort ?? toClaudeEffort(config.thinkingLevel), systemPromptFile, !!graphify, mcpConfigFile),
         cwd: projectDir,
         env,
         // Document blocks (PDFs) are valid Anthropic content even though the shared type omits them

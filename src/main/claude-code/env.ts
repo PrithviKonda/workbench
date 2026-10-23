@@ -161,6 +161,12 @@ async function claudeCanRun(): Promise<boolean> {
   }
 }
 
+/** Whether an engine can run: its CLI is installed and an account (or API profile) is set up */
+export async function engineCanRun(engine: EngineKind): Promise<boolean> {
+  if (engine === 'codex' ? !hasSignedInCodexAccount() : !(await claudeCanRun())) return false;
+  return (await getToolInfoAsync(engine)).found;
+}
+
 /**
  * Engine for a run: a pinned account decides (a session stays with the CLI it started in), then
  * Settings > Agents. "Auto" runs Claude Code when it can sign in, otherwise Codex when a

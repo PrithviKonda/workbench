@@ -24,8 +24,9 @@ import { randomUUID } from 'crypto';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'fs';
 import os from 'os';
 import path from 'path';
-import { pickEngine, resolveClaudeEnv, type EngineKind } from './env';
+import { engineCanRun, pickEngine, resolveClaudeEnv, type EngineKind } from './env';
 import { CODEX_TASK_LIST_SERVER, codexModelFor, codexTaskListTools, readCodexModels } from './codex';
+import { SECOND_OPINION_SERVER, secondOpinionPromptLine, secondOpinionTools } from './second-opinion';
 import { defaultCodexHome, findCodexRollout, getBestCodexAccount } from '../claude-profile/codex-accounts';
 import { openToolsSession } from '../insights/task-tools-server';
 import { startClaudeProcess, type ClaudeProcessHandle } from './process';
@@ -277,6 +278,8 @@ interface PhaseResult {
   authFailed?: boolean;
   stopped: boolean;
   error?: string;
+  /** Spent on the other engine's second opinions during the phase */
+  secondOpinionCostUsd?: number;
 }
 
 export class ClaudeTaskRun {
@@ -517,6 +520,7 @@ export class ClaudeTaskRun {
       jsonSchema: name === 'plan' ? PLAN_SCHEMA : name === 'validate' ? VALIDATION_SCHEMA : undefined,
       logPhase,
     });
+    if (outcome.secondOpinionCostUsd) phase.secondOpinionCostUsd = outcome.secondOpinionCostUsd;
 
     if (outcome.stopped) {
       this.endPhase(phase, { isError: true, error: 'Stopped' });
@@ -720,6 +724,13 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
     const parallelTasksPrompt = this.config.changelogPath
       ? await buildParallelTasksPrompt(this.config.changelogPath, this.config.specId, path.dirname(this.config.specDir), toRuntimePath(this.config.changelogPath))
       : undefined;
+    // Second opinions from the other engine (Settings > Agents), when it can run
+    const otherEngine: EngineKind = engine === 'codex' ? 'claude' : 'codex';
+    let secondOpinionCostUsd = 0;
+    const ask = settings.crossEngineAsk !== false && await engineCanRun(otherEngine)
+      ? secondOpinionTools(otherEngine, this.config.worktreePath, (cost) => { secondOpinionCostUsd += cost; }, this.abortController.signal)
+      : null;
+    const systemPrompt = buildSystemPrompt(this.config, specDirRelative, parallelTasksPrompt);
     const args = [
       '-p',
       '--input-format', 'stream-json',
@@ -728,7 +739,7 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
       '--model', params.model,
       '--effort', params.effort,
       '--permission-prompts', 'none',
-      '--append-system-prompt', buildSystemPrompt(this.config, specDirRelative, parallelTasksPrompt),
+      '--append-system-prompt', ask ? `${systemPrompt}\n\n${secondOpinionPromptLine(otherEngine)}` : systemPrompt,
       '--name', `${this.config.specId}: ${this.info.triage?.title || this.config.title}`.slice(0, 120),
     ];
     if (params.name === 'plan') {
@@ -752,6 +763,12 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
     const taskList = engine === 'codex' ? codexTaskListTools() : null;
     const taskListSession = taskList ? await openToolsSession(taskList.tools, taskList.call) : null;
     if (taskListSession) mcpConfig.mcpServers[CODEX_TASK_LIST_SERVER] = taskListSession.mcpServer;
+    const askSession = ask ? await openToolsSession(ask.tools, ask.call) : null;
+    if (askSession) {
+      mcpConfig.mcpServers[SECOND_OPINION_SERVER] = askSession.mcpServer;
+      // Plan mode asks before MCP tools; Codex's MCP tools need no rule
+      if (engine !== 'codex') args.push('--allowedTools', `mcp__${SECOND_OPINION_SERVER}__*`);
+    }
     if (Object.keys(mcpConfig.mcpServers).length > 0) args.push('--mcp-config', JSON.stringify(mcpConfig));
 
     this.rejectedRateLimitResetAt = undefined;
@@ -779,8 +796,10 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
     const outcome = await this.current.done;
     this.current = null;
     taskListSession?.close();
+    askSession?.close();
+    const asked = secondOpinionCostUsd > 0 ? { secondOpinionCostUsd } : {};
 
-    if (this.stopped || outcome.aborted) return { stopped: true };
+    if (this.stopped || outcome.aborted) return { stopped: true, ...asked };
 
     const result = outcome.result;
     if (result) {
@@ -794,13 +813,13 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
       }
     }
     if (rateLimit && !rateLimit.resetAt) rateLimit.resetAt = this.rejectedRateLimitResetAt;
-    if (rateLimit) return { rateLimit, stopped: false, result };
-    if (authFailed) return { authFailed, stopped: false, result };
+    if (rateLimit) return { rateLimit, stopped: false, result, ...asked };
+    if (authFailed) return { authFailed, stopped: false, result, ...asked };
     if (!result) {
       const error = outcome.stderr.trim().split('\n').slice(-3).join(' ') || `Claude Code exited with code ${outcome.exitCode}`;
-      return { stopped: false, error };
+      return { stopped: false, error, ...asked };
     }
-    return { result, stopped: false };
+    return { result, stopped: false, ...asked };
   }
 
   /** Apply one stream message; returns a signal for rate-limit or auth problems */
@@ -997,14 +1016,16 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
 
   private endPhase(phase: ClaudeRunPhase, fields: Partial<ClaudeRunPhase>, result?: ClaudeResultMessage): void {
     let costUsd = phase.costUsd;
+    const asked = phase.secondOpinionCostUsd ?? 0;
     if (result?.total_cost_usd !== undefined && result.cost_scope === 'run') {
-      costUsd = result.total_cost_usd;
+      costUsd = result.total_cost_usd + asked;
     } else if (result?.total_cost_usd !== undefined) {
       // A resumed session reports its cumulative cost: this phase's share is the difference
+      // (second opinions are billed apart from the session)
       const earlier = this.info.phases
         .filter((p) => p !== phase && p.name !== 'triage' && p.sessionId === (result.session_id ?? phase.sessionId))
-        .reduce((sum, p) => sum + (p.costUsd ?? 0), 0);
-      costUsd = Math.max(result.total_cost_usd - earlier, 0);
+        .reduce((sum, p) => sum + (p.costUsd ?? 0) - (p.secondOpinionCostUsd ?? 0), 0);
+      costUsd = Math.max(result.total_cost_usd - earlier, 0) + asked;
     }
     Object.assign(phase, {
       endedAt: new Date().toISOString(),
@@ -1013,7 +1034,7 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
         durationMs: result.duration_ms,
         numTurns: result.num_turns,
         sessionId: result.session_id ?? phase.sessionId,
-      } : {}),
+      } : asked ? { costUsd: (costUsd ?? 0) + asked } : {}),
     }, fields);
     this.updateTotalCost();
     this.saveInfo();

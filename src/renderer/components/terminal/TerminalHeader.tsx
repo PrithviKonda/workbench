@@ -11,6 +11,8 @@ import { WorktreeSelector } from './WorktreeSelector';
 interface TerminalHeaderProps {
   terminalId: string;
   isCLIMode: boolean;
+  /** The agent CLI the window runs, when known */
+  engine?: 'claude' | 'codex';
   tasks: Task[];
   associatedTask?: Task;
   onClose: () => void;
@@ -38,6 +40,7 @@ interface TerminalHeaderProps {
 export function TerminalHeader({
   terminalId,
   isCLIMode,
+  engine,
   tasks,
   associatedTask,
   onClose,
@@ -86,6 +89,10 @@ export function TerminalHeader({
             <TerminalPromptIcon className="h-4 w-4 text-primary" />
           )}
         </span>
+        {/* Codex windows say so, so a grid mixing both engines reads at a glance */}
+        {isCLIMode && engine === 'codex' && (
+          <span className="shrink-0 text-xs text-muted-foreground">{t('terminal:header.codex')}</span>
+        )}
         {/* Worktree selector - labelled with the active worktree, which can be switched */}
         {projectPath && onCreateWorktree && onSelectWorktree && (
           <WorktreeSelector

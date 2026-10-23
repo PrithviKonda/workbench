@@ -52,7 +52,7 @@ import { getToolInfoAsync } from '../cli-tool-manager';
 /**
  * The `codex` command an agent window types when Codex is the engine: the account's CODEX_HOME
  * (set the shell's way), YOLO mode as Codex's bypass flag, and `codex resume <id>` for a task's
- * Codex session
+ * Codex session (`'last'`: the directory's latest one, for a restored window)
  */
 async function buildCodexWindowCommand(
   terminal: TerminalProcess,
@@ -65,7 +65,7 @@ async function buildCodexWindowCommand(
   const exe = info?.path ? escapeShellCommand(info.path, kind) : 'codex';
   const quote = (value: string) => (kind === 'powershell' ? escapePowerShellArg(value) : kind === 'cmd' ? `"${escapeForWindowsDoubleQuote(value)}"` : escapeShellArg(value));
   const args = [
-    ...(resumeSessionId ? ['resume', resumeSessionId] : []),
+    ...(resumeSessionId === 'last' ? ['resume', '--last'] : resumeSessionId ? ['resume', resumeSessionId] : []),
     ...(dangerouslySkipPermissions ? ['--dangerously-bypass-approvals-and-sandbox'] : []),
     // Projects written for Claude Code keep their instructions in CLAUDE.md
     '-c', quote('project_doc_fallback_filenames=["CLAUDE.md"]'),
@@ -501,6 +501,8 @@ export interface InvokeCLIOptions {
    * CLAUDE_CONFIG_DIR even if the terminal (or its active profile) uses another one.
    */
   configDir?: string;
+  /** The CLI to run ("New agent" menu); absent: a Codex profile or the Settings > Agents engine decides */
+  engine?: 'claude' | 'codex';
 }
 
 /** Session ids are UUIDs; anything else is refused so it never reaches the shell unescaped */
@@ -1592,7 +1594,7 @@ export async function invokeCLIAsync(
   // Track terminal state for cleanup on error
   const wasClaudeMode = terminal.isCLIMode;
   const previousProfileId = terminal.claudeProfileId;
-  const { resumeSessionId } = options;
+  const { resumeSessionId, engine } = options;
 
   const startTime = Date.now();
 
@@ -1617,11 +1619,19 @@ export async function invokeCLIAsync(
 
     const projectPath = cwd || terminal.projectPath || terminal.cwd;
 
-    // Codex engine (Settings > Agents, or a task's Codex session to resume): the window runs codex
-    const codexWindow = isCodexAccountId(profileId) || (!resumeSessionId && (await pickEngine()) === 'codex');
+    // Codex engine (the "New agent" menu, Settings > Agents, or a task's Codex session to resume):
+    // the window runs codex
+    const codexWindow = engine === 'codex' || (engine !== 'claude' &&
+      (isCodexAccountId(profileId) || (!resumeSessionId && (await pickEngine()) === 'codex')));
+    terminal.engine = codexWindow ? 'codex' : 'claude';
     if (codexWindow) {
       const cwdCommand = buildCdCommand(windowPath(terminal, cwd), shellKindOf(terminal));
       writeCliCommand(terminal, `${cwdCommand}${await buildCodexWindowCommand(terminal, profileId, dangerouslySkipPermissions, resumeSessionId)}`);
+      if (shouldAutoRenameTerminal(terminal.title)) {
+        terminal.title = 'Codex';
+        safeSendToRenderer(getWindow, IPC_CHANNELS.TERMINAL_TITLE_CHANGE, terminal.id, 'Codex');
+      }
+      if (terminal.projectPath) SessionHandler.persistSessionAsync(terminal);
       return;
     }
 
@@ -1780,6 +1790,14 @@ export async function resumeClaudeAsync(
 
   try {
     terminal.isCLIMode = true;
+
+    // A Codex window picks up the directory's latest Codex session
+    if (terminal.engine === 'codex') {
+      const cdCommand = buildCdCommand(windowPath(terminal, terminal.projectPath || terminal.cwd), shellKindOf(terminal));
+      writeCliCommand(terminal, `${cdCommand}${await buildCodexWindowCommand(terminal, undefined, terminal.dangerouslySkipPermissions, 'last')}`);
+      if (terminal.projectPath) SessionHandler.persistSessionAsync(terminal);
+      return;
+    }
 
     // Async CLI invocation - non-blocking
     // Add timeout protection for CLI detection (10s timeout)

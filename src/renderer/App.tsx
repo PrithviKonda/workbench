@@ -697,7 +697,7 @@ export function App() {
           {/* Window drag strip; on Windows/Linux it also reserves the row the window controls sit in.
               Insights draws its own so its chat history column can run the full height, except in
               development builds, where the DEVELOPMENT BUILD strip below has to stay under it */}
-          {(IS_DEV_BUILD || !(activeView === 'insights' && selectedProject)) && (
+          {(IS_DEV_BUILD || !((activeView === 'insights' || activeView === 'chatgpt') && selectedProject)) && (
             <div className="electron-drag shrink-0" style={{ height: TITLE_BAR_STRIP_HEIGHT }} />
           )}
 
@@ -737,6 +737,9 @@ export function App() {
                 </div>
                 {activeView === 'insights' && (activeProjectId || selectedProjectId) && (
                   <Insights projectId={activeProjectId || selectedProjectId!} />
+                )}
+                {activeView === 'chatgpt' && (activeProjectId || selectedProjectId) && (
+                  <Insights key="chatgpt" projectId={activeProjectId || selectedProjectId!} engine="codex" />
                 )}
                 {activeView === 'memory' && (activeProjectId || selectedProjectId) && (
                   <MemoryGraph projectId={activeProjectId || selectedProjectId!} />

@@ -40,6 +40,8 @@ export interface TerminalSession {
   displayOrder?: number;
   /** Associated worktree configuration (validated on restore) */
   worktreeConfig?: TerminalWorktreeConfig;
+  /** The agent CLI the window runs (absent: Claude Code) */
+  engine?: 'claude' | 'codex';
 }
 
 export interface TerminalRestoreResult {

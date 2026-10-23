@@ -69,6 +69,7 @@ function createSessionObject(terminal: TerminalProcess): TerminalSession {
     createdAt: new Date().toISOString(),
     lastActiveAt: new Date().toISOString(),
     worktreeConfig: terminal.worktreeConfig,
+    engine: terminal.engine,
   };
 }
 

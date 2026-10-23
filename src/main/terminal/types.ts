@@ -22,6 +22,8 @@ export interface TerminalProcess {
   pendingCLIResume?: boolean;
   /** Whether Claude was invoked with --dangerously-skip-permissions (YOLO mode) */
   dangerouslySkipPermissions?: boolean;
+  /** The agent CLI the window runs (absent: Claude Code) */
+  engine?: 'claude' | 'codex';
   /** The project's Graphify output directory (its GRAPHIFY_OUT), when the project has a memory graph */
   graphifyOut?: string;
   /** Whether the project learns from its sessions, so Claude is told to save what it learns */

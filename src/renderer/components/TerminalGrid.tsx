@@ -16,13 +16,16 @@ import {
   rectSortingStrategy,
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
-import { TerminalSquare } from 'lucide-react';
+import { ChevronDown, TerminalSquare } from 'lucide-react';
 import { AgentNodeIcon, AgentsIcon, SettingsIcon as Settings, TerminalPromptIcon } from './icons/app-icons';
 import { SortableTerminalWrapper } from './SortableTerminalWrapper';
 import { Button } from './ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { cn } from '../lib/utils';
 import { useTerminalStore, getActiveProjectTerminalCount, isProjectTerminal } from '../stores/terminal-store';
 import { useTaskStore } from '../stores/task-store';
 import { useLiveAgentStore } from '../stores/live-agent-store';
+import { useSettingsStore } from '../stores/settings-store';
 import { TERMINAL_DOM_UPDATE_DELAY_MS, PANEL_CLEANUP_GRACE_PERIOD_MS } from '../../shared/constants';
 import { computeTerminalGridLayout, computeWeightedTerminalLayout } from '../lib/terminal-grid-layout';
 
@@ -161,12 +164,63 @@ export function TerminalGrid({ projectPath, onNewTaskClick }: TerminalGridProps)
     }
   }, [addTerminal, canAddTerminal, projectPath]);
 
-  // A terminal that starts Claude Code as soon as its shell is ready
-  const handleAddAgent = useCallback(() => {
+  // A terminal that starts an agent CLI as soon as its shell is ready: the one picked from the
+  // "New agent" menu, or the Settings > Agents engine
+  const defaultEngine = useSettingsStore((state) => state.settings.aiEngine);
+  const handleAddAgent = useCallback((engine?: 'claude' | 'codex') => {
     if (canAddTerminal(projectPath)) {
-      addTerminal(projectPath, projectPath, { launchCLI: true });
+      // On "Automatic" the main process picks (Claude when it can run)
+      const chosen = engine ?? (defaultEngine === 'claude' || defaultEngine === 'codex' ? defaultEngine : undefined);
+      addTerminal(projectPath, projectPath, { launchCLI: true, engine: chosen });
     }
-  }, [addTerminal, canAddTerminal, projectPath]);
+  }, [addTerminal, canAddTerminal, projectPath, defaultEngine]);
+
+  // The menu offers ChatGPT (Codex) once a Codex account is signed in
+  const [codexReady, setCodexReady] = useState(false);
+  useEffect(() => {
+    void window.electronAPI.listCodexAccounts().then((result) => setCodexReady(!!result.data?.accounts.length));
+  }, [projectPath]);
+
+  const newAgentButton = (variant: 'empty' | 'toolbar') => {
+    const disabled = !canAddTerminal(projectPath);
+    const toolbarClass = 'h-8 text-[0.8125rem] text-muted-foreground hover:bg-nav-hover hover:text-foreground';
+    return (
+      <div className="flex items-center">
+        <Button
+          variant={variant === 'empty' ? 'default' : 'ghost'}
+          size={variant === 'empty' ? 'default' : 'sm'}
+          className={cn('gap-2 rounded-r-none', variant === 'toolbar' && cn(toolbarClass, 'gap-1.5 pr-1.5'))}
+          onClick={() => handleAddAgent()}
+          disabled={disabled}
+        >
+          <AgentsIcon className={variant === 'empty' ? 'h-4 w-4' : 'h-3.5 w-3.5'} />
+          {t('terminal:grid.newAgent')}
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant={variant === 'empty' ? 'default' : 'ghost'}
+              size={variant === 'empty' ? 'default' : 'sm'}
+              className={cn('rounded-l-none px-1.5', variant === 'empty' ? 'border-l border-primary-foreground/20' : toolbarClass)}
+              disabled={disabled}
+              aria-label={t('terminal:grid.chooseAgent')}
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-60">
+            <DropdownMenuItem className="cursor-pointer" onSelect={() => handleAddAgent('claude')}>
+              {t('terminal:grid.engines.claude')}
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer flex-col items-start gap-0" disabled={!codexReady} onSelect={() => handleAddAgent('codex')}>
+              <span>{t('terminal:grid.engines.codex')}</span>
+              {!codexReady && <span className="text-xs text-muted-foreground">{t('terminal:grid.engines.codexSignIn')}</span>}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    );
+  };
 
   // Toggle terminal expand state
   const handleToggleExpand = useCallback((terminalId: string) => {
@@ -272,10 +326,7 @@ export function TerminalGrid({ projectPath, onNewTaskClick }: TerminalGridProps)
             {t('terminal:grid.emptyDescription')}
           </p>
           <div className="mt-8 flex items-center gap-2">
-            <Button onClick={handleAddAgent} className="gap-2">
-              <AgentsIcon className="h-4 w-4" />
-              {t('terminal:grid.newAgent')}
-            </Button>
+            {newAgentButton('empty')}
             <Button variant="ghost" onClick={handleAddTerminal} className="gap-2 hover:bg-nav-hover">
               <TerminalPromptIcon className="h-4 w-4" />
               {t('terminal:grid.newTerminal')}
@@ -315,16 +366,7 @@ export function TerminalGrid({ projectPath, onNewTaskClick }: TerminalGridProps)
             </Button>
           </div>
           <div className="flex items-center gap-0.5">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 gap-1.5 text-[0.8125rem] text-muted-foreground hover:bg-nav-hover hover:text-foreground"
-              onClick={handleAddAgent}
-              disabled={!canAddTerminal(projectPath)}
-            >
-              <AgentsIcon className="h-3.5 w-3.5" />
-              {t('terminal:grid.newAgent')}
-            </Button>
+            {newAgentButton('toolbar')}
             <Button
               variant="ghost"
               size="sm"

@@ -216,6 +216,7 @@ export interface Terminal {
   pendingTaskSession?: PendingTaskSession;  // With launchCLIOnCreate: resume this task session instead of starting a new one
   displayOrder?: number;  // Display order for tab persistence (lower = further left)
   cliNamedOnce?: boolean;  // Whether this Claude terminal has been auto-named based on initial message (prevents repeated naming)
+  engine?: 'claude' | 'codex';  // Agent CLI the window runs ("New agent" menu; absent: the Settings > Agents engine)
 }
 
 interface TerminalLayout {
@@ -235,7 +236,7 @@ interface TerminalState {
   agentsViewRequest: AgentsViewRequest | null;  // Latest request to show the Agents page (App switches view)
 
   // Actions
-  addTerminal: (cwd?: string, projectPath?: string, options?: { launchCLI?: boolean }) => Terminal | null;
+  addTerminal: (cwd?: string, projectPath?: string, options?: { launchCLI?: boolean; engine?: 'claude' | 'codex' }) => Terminal | null;
   addRestoredTerminal: (session: TerminalSession) => Terminal | null;
   // Add a terminal with a specific ID (for terminals created in main process, like OAuth login terminals)
   addExternalTerminal: (id: string, title: string, cwd?: string, projectPath?: string) => Terminal | null;
@@ -303,7 +304,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
   hasRestoredSessions: false,
   agentsViewRequest: null,
 
-  addTerminal: (cwd?: string, projectPath?: string, options?: { launchCLI?: boolean }) => {
+  addTerminal: (cwd?: string, projectPath?: string, options?: { launchCLI?: boolean; engine?: 'claude' | 'codex' }) => {
     const state = get();
     const activeCount = getActiveProjectTerminalCount(state.terminals, projectPath);
     if (activeCount >= state.maxTerminals) {
@@ -322,6 +323,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       projectPath,
       displayOrder: state.terminals.length,  // New terminals appear at the end
       launchCLIOnCreate: options?.launchCLI,
+      engine: options?.engine,
     };
 
     set((state) => ({
@@ -389,6 +391,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
       projectPath: session.projectPath,
       // Worktree config is validated in main process before restore
       worktreeConfig: session.worktreeConfig,
+      engine: session.engine,
       // Restore displayOrder for tab position persistence (falls back to end if not set)
       displayOrder: session.displayOrder ?? state.terminals.length,
       // If session was in Claude mode before shutdown, mark for deferred resume.

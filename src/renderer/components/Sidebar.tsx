@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  MessageSquare,
   Plus,
   RefreshCw,
   PanelLeft
@@ -35,7 +36,7 @@ import { GitSetupModal } from './GitSetupModal';
 import { UsageIndicator } from './UsageIndicator';
 import type { Project, GitStatus } from '../../shared/types';
 
-export type SidebarView = 'projects' | 'kanban' | 'terminals' | 'insights' | 'memory';
+export type SidebarView = 'projects' | 'kanban' | 'terminals' | 'insights' | 'chatgpt' | 'memory';
 
 interface SidebarProps {
   onSettingsClick: () => void;
@@ -55,6 +56,8 @@ const navItems: NavItem[] = [
   { id: 'kanban', labelKey: 'navigation:items.kanban', icon: KanbanIcon },
   { id: 'terminals', labelKey: 'navigation:items.terminals', icon: AgentNodeIcon },
   { id: 'insights', labelKey: 'navigation:items.insights', icon: InsightsIcon },
+  // Only shown when a Codex account is signed in
+  { id: 'chatgpt', labelKey: 'navigation:items.chatgpt', icon: MessageSquare },
   // Only shown when the project has a memory graph (.workbench/knowledge)
   { id: 'memory', labelKey: 'navigation:items.memory', icon: GraphIcon },
 ];
@@ -79,6 +82,14 @@ export function Sidebar({
   useEffect(() => {
     if (selectedProjectId) void refreshMemoryGraph(selectedProjectId);
   }, [selectedProjectId, refreshMemoryGraph]);
+
+  // Whether a Codex account is signed in, for the ChatGPT item
+  const [hasCodexAccount, setHasCodexAccount] = useState(false);
+  useEffect(() => {
+    window.electronAPI.listCodexAccounts()
+      .then((result) => setHasCodexAccount(!!result.success && !!result.data?.accounts.some((a) => a.isAuthenticated)))
+      .catch(() => setHasCodexAccount(false));
+  }, [selectedProjectId]);
 
   const [showAddProjectModal, setShowAddProjectModal] = useState(false);
   const [showInitDialog, setShowInitDialog] = useState(false);
@@ -293,7 +304,9 @@ export function Sidebar({
               </h3>
             )}
             <nav className="flex flex-col gap-px">
-              {navItems.filter((item) => item.id !== 'memory' || hasMemoryGraph).map(renderNavItem)}
+              {navItems
+                .filter((item) => (item.id !== 'memory' || hasMemoryGraph) && (item.id !== 'chatgpt' || hasCodexAccount))
+                .map(renderNavItem)}
             </nav>
           </div>
         </ScrollArea>
