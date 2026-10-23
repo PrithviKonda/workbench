@@ -90,22 +90,14 @@
     "newWindow": "New window"
   },
   "appUpdate": {
-    "title": "App update available",
-    "description": "A new version of Workbench is ready to download",
-    "newVersion": "New version",
-    "released": "Released",
-    "downloading": "Downloading...",
-    "downloadUpdate": "Download update",
-    "installAndRestart": "Install and restart",
-    "installLater": "Install later",
-    "remindMeLater": "Remind me later",
-    "updateDownloaded": "Update downloaded successfully! Click Install to restart and apply the update.",
+    "bannerTitle": "Workbench {{version}} is available",
+    "whatsNew": "What's new",
+    "update": "Update",
+    "downloadingPercent": "Downloading {{percent}}%",
+    "restarting": "Installing, Workbench will reopen",
     "downloadError": "Failed to download update",
-    "claudeCodeChangelog": "View Claude Code changelog",
-    "claudeCodeChangelogAriaLabel": "View Claude Code changelog (opens in new window)",
-    "readOnlyVolumeTitle": "Cannot install from disk image",
-    "readOnlyVolumeDescription": "Please move Workbench to your Applications folder before updating.",
-    "skipThisVersion": "Skip this version"
+    "remindMeLater": "Remind me later",
+    "readOnlyVolumeDescription": "Move Workbench to your Applications folder before updating"
   },
   "addWorkspace": {
     "title": "Create workspace",

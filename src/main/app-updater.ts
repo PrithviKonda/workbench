@@ -31,6 +31,7 @@ import { compareVersions } from './updater/version-manager';
 import { getUpdaterGitHubToken } from './updater/github-token';
 import { isMacOS } from './platform';
 import { readSettingsFile, writeSettingsFile } from './settings-utils';
+import { downloadMacZip, needsSelfInstall, startMacSelfInstall } from './updater/mac-self-install';
 
 // GitHub repo info for API calls
 const GITHUB_OWNER = 'PrithviKonda';
@@ -48,6 +49,31 @@ type UpdateChannel = 'latest' | 'beta';
 
 // Store interval ID for cleanup during shutdown
 let periodicCheckIntervalId: ReturnType<typeof setInterval> | null = null;
+
+// Mac builds without a Developer ID update themselves (see updater/mac-self-install.ts):
+// the update found last, and the zip downloaded for it
+let availableUpdate: UpdateInfo | null = null;
+let selfInstallZip: string | null = null;
+let selfDownload: Promise<void> | null = null;
+
+/** Download the available update: through electron-updater, or by hand on unsigned Mac builds */
+async function startDownload(): Promise<void> {
+  if (!(await needsSelfInstall())) {
+    await autoUpdater.downloadUpdate();
+    return;
+  }
+  const info = availableUpdate;
+  if (!info) throw new Error('No update to download');
+  if (selfInstallZip) return;
+  selfDownload ??= (async () => {
+    const zip = await downloadMacZip(info, `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/download/v${info.version}`, (progress) =>
+      sendUpdateEvent(IPC_CHANNELS.APP_UPDATE_PROGRESS, progress));
+    selfInstallZip = zip;
+    downloadedUpdateInfo = { version: info.version, releaseNotes: formatReleaseNotes(info.releaseNotes), releaseDate: info.releaseDate };
+    if (!shouldSuppressUpdate(info.version)) sendUpdateEvent(IPC_CHANNELS.APP_UPDATE_DOWNLOADED, downloadedUpdateInfo);
+  })().finally(() => { selfDownload = null; });
+  await selfDownload;
+}
 
 /**
  * Convert basic HTML (from GitHub release bodies) to markdown.
@@ -320,8 +346,10 @@ export function initializeAppUpdater(getWindow: () => BrowserWindow | null, beta
     });
 
     // Download the update now that we've confirmed it's valid
-    autoUpdater.downloadUpdate().catch((error) => {
+    availableUpdate = info;
+    startDownload().catch((error) => {
       console.error('[app-updater] Failed to download update:', error.message);
+      sendUpdateEvent(IPC_CHANNELS.APP_UPDATE_ERROR, { message: error.message });
     });
   });
 
@@ -487,7 +515,7 @@ export async function checkForUpdates(): Promise<AppUpdateCheckResult> {
 export async function downloadUpdate(): Promise<void> {
   try {
     console.warn('[app-updater] Manual update download requested');
-    await autoUpdater.downloadUpdate();
+    await startDownload();
   } catch (error) {
     console.error('[app-updater] Manual update download failed:', error);
     throw error;
@@ -542,6 +570,14 @@ export function quitAndInstall(): boolean {
 
   console.warn('[app-updater] Quitting and installing update');
   allowWindowClose(); // don't let hide-to-tray block the updater from closing the window
+  if (selfInstallZip) {
+    // Unsigned Mac build: a script swaps the bundle once the app has quit, then opens it
+    startMacSelfInstall(selfInstallZip).then(() => app.quit(), (error: Error) => {
+      console.error('[app-updater] Self-install failed:', error);
+      sendUpdateEvent(IPC_CHANNELS.APP_UPDATE_ERROR, { message: error.message });
+    });
+    return true;
+  }
   autoUpdater.quitAndInstall(false, true);
   return true;
 }
