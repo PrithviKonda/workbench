@@ -29,7 +29,7 @@ import {
   type PlanningPolicy,
   type TriageMode
 } from '../../../shared/types/claude-code';
-import type { AppSettings } from '../../../shared/types';
+import type { AiEngine, AppSettings } from '../../../shared/types';
 import { useProjectStore } from '../../stores/project-store';
 import { useLiveAgentStore } from '../../stores/live-agent-store';
 
@@ -67,7 +67,20 @@ export function ClaudeCodeTaskSettings({ settings, onSettingsChange }: ClaudeCod
       ? t('claudeCode.agentWindows.liveAgentHooksFailed', { error: hooksError })
       : undefined;
 
-  const modelLabel = (model: ClaudeModelAlias) => t(`claudeCode.models.${model}`);
+  // With Codex as the engine, each tier names the Codex model it runs as
+  const engine: AiEngine = settings.aiEngine ?? 'auto';
+  const [codexTiers, setCodexTiers] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (engine !== 'codex') return;
+    void window.electronAPI.getCodexModels().then((result) => {
+      if (result.success && result.data) setCodexTiers(result.data);
+    });
+  }, [engine]);
+  const modelLabel = (model: ClaudeModelAlias) => {
+    const tier = t(`claudeCode.models.${model}`);
+    const codexModel = engine === 'codex' ? codexTiers[model] : undefined;
+    return codexModel ? t('claudeCode.engine.codexModel', { tier, model: codexModel }) : tier;
+  };
   const effortLabel = (effort: ClaudeEffort) => t(`claudeCode.efforts.${effort}`);
 
   const modelSelect = (id: string, value: ClaudeModelAlias, onChange: (model: ClaudeModelAlias) => void) => (
@@ -89,6 +102,23 @@ export function ClaudeCodeTaskSettings({ settings, onSettingsChange }: ClaudeCod
 
   return (
     <>
+      <SettingsSection title={t('claudeCode.engine.title')}>
+        <SettingsRows>
+          <SettingsRow label={t('claudeCode.engine.label')} description={t('claudeCode.engine.description')}>
+            <SegmentedControl<AiEngine>
+              value={engine}
+              onValueChange={(aiEngine) => onSettingsChange({ ...settings, aiEngine })}
+              ariaLabel={t('claudeCode.engine.label')}
+              options={[
+                { value: 'auto', label: t('claudeCode.engine.options.auto') },
+                { value: 'claude', label: t('claudeCode.engine.options.claude') },
+                { value: 'codex', label: t('claudeCode.engine.options.codex') }
+              ]}
+            />
+          </SettingsRow>
+        </SettingsRows>
+      </SettingsSection>
+
       <SettingsSection title={t('claudeCode.execution.title')}>
         <SettingsRows>
           <SettingsRow

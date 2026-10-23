@@ -20,6 +20,7 @@ const INFO = {
   tools: {},
 };
 
+vi.mock('../../claude-code/env', () => ({ pickEngine: vi.fn(async () => 'claude') }));
 vi.mock('../../platform', () => ({
   isWindows: () => true,
   isMacOS: () => false,

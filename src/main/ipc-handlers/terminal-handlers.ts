@@ -21,6 +21,35 @@ import { getPathDelimiter, isWindows } from '../platform';
 import { isWslRuntime, toRuntimePath } from '../platform/shell-runtime';
 import { safeSendToRenderer } from './utils';
 import { openTerminalWithCommand } from './claude-code-handlers';
+import type { CodexAccountsInfo } from '../../shared/types';
+import {
+  codexUsageSummaries,
+  defaultCodexHome,
+  getBestCodexAccount,
+  getCodexAccount,
+  listCodexAccounts,
+  nextCodexHome,
+  renameCodexAccount,
+} from '../claude-profile/codex-accounts';
+import { codexModelFor, readCodexModels } from '../claude-code/codex';
+import { spawnTool } from '../platform/runtime-exec';
+import { getAugmentedEnvAsync } from '../env-utils';
+
+/** Run `codex <args>` for one account's CODEX_HOME, optionally with stdin, and wait for it */
+async function runCodexCommand(args: string[], codexHome: string, stdin?: string): Promise<{ code: number | null; output: string }> {
+  const codex = await getToolInfoAsync('codex', { refreshIfMissing: true });
+  if (!codex.found || !codex.path) throw new Error('Codex CLI not found. Install it with: npm install -g @openai/codex');
+  const env = { ...(await getAugmentedEnvAsync()), CODEX_HOME: codexHome };
+  return new Promise((resolve, reject) => {
+    const child = spawnTool('codex', args, { command: codex.path, env, stdio: 'pipe', windowsHide: true });
+    let output = '';
+    child.stdout?.on('data', (chunk) => { output += String(chunk); });
+    child.stderr?.on('data', (chunk) => { output += String(chunk); });
+    child.on('error', reject);
+    child.on('close', (code) => resolve({ code, output: output.slice(-2000) }));
+    child.stdin?.end(stdin ?? '');
+  });
+}
 
 
 /**
@@ -265,6 +294,79 @@ export function registerTerminalHandlers(
       }
     }
   );
+
+  // ChatGPT/OpenAI (Codex) accounts: each CODEX_HOME with a sign-in (see codex-accounts.ts)
+  ipcMain.handle(IPC_CHANNELS.CODEX_ACCOUNTS_LIST, async (): Promise<IPCResult<CodexAccountsInfo>> => {
+    try {
+      const codex = await getToolInfoAsync('codex');
+      const best = getBestCodexAccount();
+      return { success: true, data: { accounts: listCodexAccounts(), usage: codexUsageSummaries(best?.id), cliFound: codex.found } };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // Codex's own sign-in (`codex login`) in the user's terminal: the account's CODEX_HOME to sign it
+  // in again, else the next free one. Without a browser in reach (Linux containers) it uses a device code
+  ipcMain.handle(IPC_CHANNELS.CODEX_ACCOUNTS_LOGIN, async (_, accountId?: string): Promise<IPCResult> => {
+    try {
+      const codex = await getToolInfoAsync('codex', { refreshIfMissing: true });
+      if (!codex.found || !codex.path) return { success: false, error: 'Codex CLI not found. Install it with: npm install -g @openai/codex' };
+      const home = (accountId && getCodexAccount(accountId)?.configDir) || nextCodexHome();
+      const deviceAuth = process.env.WORKBENCH_CODEX_DEVICE_AUTH === '1' ? ' --device-auth' : '';
+      if (isWindows() && !isWslRuntime()) {
+        const env: NodeJS.ProcessEnv = { ...process.env, CODEX_HOME: home };
+        env.PATH = [path.dirname(codex.path), process.env.PATH].filter(Boolean).join(getPathDelimiter());
+        await openTerminalWithCommand(`codex login${deviceAuth}`, env);
+      } else {
+        const quote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
+        await openTerminalWithCommand(`env CODEX_HOME=${quote(toRuntimePath(home))} ${quote(codex.path)} login${deviceAuth}`);
+      }
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to open a terminal' };
+    }
+  });
+
+  // An OpenAI API key instead of a ChatGPT sign-in (the key goes to Codex on stdin, never in arguments)
+  ipcMain.handle(IPC_CHANNELS.CODEX_ACCOUNTS_API_KEY, async (_, apiKey: string): Promise<IPCResult> => {
+    try {
+      const key = typeof apiKey === 'string' ? apiKey.trim() : '';
+      if (!key) return { success: false, error: 'Enter an OpenAI API key' };
+      const result = await runCodexCommand(['login', '--with-api-key'], nextCodexHome(), `${key}\n`);
+      return result.code === 0 ? { success: true } : { success: false, error: result.output.trim() || `codex login exited with code ${result.code}` };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CODEX_ACCOUNTS_RENAME, async (_, accountId: string, name: string): Promise<IPCResult> => {
+    renameCodexAccount(accountId, String(name ?? ''));
+    return { success: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.CODEX_ACCOUNTS_SIGN_OUT, async (_, accountId: string): Promise<IPCResult> => {
+    try {
+      const home = getCodexAccount(accountId)?.configDir;
+      if (!home) return { success: false, error: 'Account not found' };
+      const result = await runCodexCommand(['logout'], home);
+      return result.code === 0 ? { success: true } : { success: false, error: result.output.trim() || `codex logout exited with code ${result.code}` };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
+
+  // The Codex model each Claude tier runs as (Settings shows it next to the tier when Codex is the engine)
+  ipcMain.handle(IPC_CHANNELS.CODEX_MODELS, async (): Promise<IPCResult<Record<string, string>>> => {
+    const models = readCodexModels(getBestCodexAccount()?.configDir ?? defaultCodexHome());
+    const tiers: Record<string, string> = {};
+    for (const tier of ['haiku', 'sonnet', 'opus', 'fable']) {
+      const slug = codexModelFor(tier, models);
+      const model = models.find((m) => m.slug === slug);
+      if (model) tiers[tier] = model.displayName;
+    }
+    return { success: true, data: tiers };
+  });
 
   // After Claude Code's own sign-in in a terminal: list the account it signed in
   ipcMain.handle(

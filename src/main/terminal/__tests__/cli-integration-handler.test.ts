@@ -7,6 +7,7 @@ import type { TerminalProcess } from '../types';
 import { buildCdCommand, escapeShellArg } from '../../../shared/utils/shell-escape';
 
 // Mock the platform module (main/platform/index.ts)
+vi.mock('../../claude-code/env', () => ({ pickEngine: vi.fn(async () => 'claude') }));
 vi.mock('../../platform', () => ({
   isWindows: vi.fn(() => false),
   isMacOS: vi.fn(() => false),

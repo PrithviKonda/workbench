@@ -11,6 +11,7 @@ import type {
   TerminalCreateOptions,
   ClaudeProfile,
   ClaudeProfileSettings,
+  CodexAccountsInfo,
   ClaudeUsageSnapshot,
   CreateTerminalWorktreeRequest,
   TerminalWorktreeConfig,
@@ -87,6 +88,12 @@ export interface TerminalAPI {
   deleteClaudeProfile: (profileId: string) => Promise<IPCResult>;
   loginClaudeAccount: (profileId?: string) => Promise<IPCResult>;
   redetectClaudeAccounts: () => Promise<IPCResult<ClaudeProfileSettings>>;
+  listCodexAccounts: () => Promise<IPCResult<CodexAccountsInfo>>;
+  loginCodexAccount: (accountId?: string) => Promise<IPCResult>;
+  loginCodexWithApiKey: (apiKey: string) => Promise<IPCResult>;
+  renameCodexAccount: (accountId: string, name: string) => Promise<IPCResult>;
+  signOutCodexAccount: (accountId: string) => Promise<IPCResult>;
+  getCodexModels: () => Promise<IPCResult<Record<string, string>>>;
   renameClaudeProfile: (profileId: string, newName: string) => Promise<IPCResult>;
   setActiveClaudeProfile: (profileId: string) => Promise<IPCResult>;
   switchClaudeProfile: (terminalId: string, profileId: string) => Promise<IPCResult>;
@@ -372,6 +379,24 @@ export const createTerminalAPI = (): TerminalAPI => ({
 
   redetectClaudeAccounts: (): Promise<IPCResult<ClaudeProfileSettings>> =>
     ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_ACCOUNTS_REDETECT),
+
+  listCodexAccounts: (): Promise<IPCResult<CodexAccountsInfo>> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CODEX_ACCOUNTS_LIST),
+
+  loginCodexAccount: (accountId?: string): Promise<IPCResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CODEX_ACCOUNTS_LOGIN, accountId),
+
+  loginCodexWithApiKey: (apiKey: string): Promise<IPCResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CODEX_ACCOUNTS_API_KEY, apiKey),
+
+  renameCodexAccount: (accountId: string, name: string): Promise<IPCResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CODEX_ACCOUNTS_RENAME, accountId, name),
+
+  signOutCodexAccount: (accountId: string): Promise<IPCResult> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CODEX_ACCOUNTS_SIGN_OUT, accountId),
+
+  getCodexModels: (): Promise<IPCResult<Record<string, string>>> =>
+    ipcRenderer.invoke(IPC_CHANNELS.CODEX_MODELS),
 
   renameClaudeProfile: (profileId: string, newName: string): Promise<IPCResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.CLAUDE_PROFILE_RENAME, profileId, newName),

@@ -26,6 +26,12 @@ export const claudeProfileMock = {
   deleteClaudeProfile: async () => ({ success: true }),
   loginClaudeAccount: async () => ({ success: true }),
   redetectClaudeAccounts: async () => ({ success: true, data: { profiles: [], activeProfileId: '' } }),
+  listCodexAccounts: async () => ({ success: true, data: { accounts: [], usage: [], cliFound: false } }),
+  loginCodexAccount: async () => ({ success: true }),
+  loginCodexWithApiKey: async () => ({ success: true }),
+  renameCodexAccount: async () => ({ success: true }),
+  signOutCodexAccount: async () => ({ success: true }),
+  getCodexModels: async () => ({ success: true, data: {} }),
 
   renameClaudeProfile: async () => ({ success: true }),
 

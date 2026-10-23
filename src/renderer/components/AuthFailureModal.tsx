@@ -68,7 +68,7 @@ export function AuthFailureModal({ onOpenSettings }: AuthFailureModalProps) {
             {failureMessage}
           </p>
           <p className="text-sm text-muted-foreground">
-            {t('auth.failure.description', 'Please re-authenticate your Claude profile to continue using Workbench.')}
+            {t('auth.failure.description', 'Sign in to this account again (Claude or ChatGPT) to continue using Workbench.')}
           </p>
 
           {authFailureInfo.taskId && (

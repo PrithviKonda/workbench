@@ -45,6 +45,37 @@ import { findSessionTranscript, latestTranscript } from '../claude-code/session-
 import { claudeConfigDirs } from '../claude-profile/profile-config-dirs';
 import { appLog } from '../app-logger';
 import { claudeThemeFlag } from '../claude-cli-theme';
+import { pickEngine } from '../claude-code/env';
+import { getBestCodexAccount, defaultCodexHome, isCodexAccountId } from '../claude-profile/codex-accounts';
+import { getToolInfoAsync } from '../cli-tool-manager';
+
+/**
+ * The `codex` command an agent window types when Codex is the engine: the account's CODEX_HOME
+ * (set the shell's way), YOLO mode as Codex's bypass flag, and `codex resume <id>` for a task's
+ * Codex session
+ */
+async function buildCodexWindowCommand(
+  terminal: TerminalProcess,
+  profileId: string | undefined,
+  dangerouslySkipPermissions: boolean | undefined,
+  resumeSessionId: string | undefined
+): Promise<string> {
+  const info = isWslWindow(terminal) ? null : await getToolInfoAsync('codex', { refreshIfMissing: true });
+  const kind = shellKindOf(terminal);
+  const exe = info?.path ? escapeShellCommand(info.path, kind) : 'codex';
+  const quote = (value: string) => (kind === 'powershell' ? escapePowerShellArg(value) : kind === 'cmd' ? `"${escapeForWindowsDoubleQuote(value)}"` : escapeShellArg(value));
+  const args = [
+    ...(resumeSessionId ? ['resume', resumeSessionId] : []),
+    ...(dangerouslySkipPermissions ? ['--dangerously-bypass-approvals-and-sandbox'] : []),
+    // Projects written for Claude Code keep their instructions in CLAUDE.md
+    '-c', quote('project_doc_fallback_filenames=["CLAUDE.md"]'),
+  ].join(' ');
+  const home = isWslWindow(terminal) ? undefined : getBestCodexAccount({ pinnedId: isCodexAccountId(profileId) ? profileId : undefined })?.configDir;
+  if (!home || home === defaultCodexHome()) return `${exe} ${args}`;
+  if (kind === 'powershell') return `$env:CODEX_HOME=${quote(home)}; ${exe} ${args}`;
+  if (kind === 'cmd') return `set "CODEX_HOME=${home}" && ${exe} ${args}`;
+  return `env CODEX_HOME=${quote(home)} ${exe} ${args}`;
+}
 
 // ============================================================================
 // CLI DISPATCH UTILITIES
@@ -1585,6 +1616,14 @@ export async function invokeCLIAsync(
     terminal.dangerouslySkipPermissions = dangerouslySkipPermissions;
 
     const projectPath = cwd || terminal.projectPath || terminal.cwd;
+
+    // Codex engine (Settings > Agents, or a task's Codex session to resume): the window runs codex
+    const codexWindow = isCodexAccountId(profileId) || (!resumeSessionId && (await pickEngine()) === 'codex');
+    if (codexWindow) {
+      const cwdCommand = buildCdCommand(windowPath(terminal, cwd), shellKindOf(terminal));
+      writeCliCommand(terminal, `${cwdCommand}${await buildCodexWindowCommand(terminal, profileId, dangerouslySkipPermissions, resumeSessionId)}`);
+      return;
+    }
 
     // Dispatch to the appropriate CLI based on preferredCLI setting
     const settings = await readSettingsFileAsync();

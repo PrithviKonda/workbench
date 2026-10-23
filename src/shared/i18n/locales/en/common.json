@@ -367,7 +367,7 @@
       "tokenInvalid": "Your authentication token is invalid.",
       "tokenMissing": "No authentication token found.",
       "authFailed": "Authentication failed.",
-      "description": "Please re-authenticate your Claude profile to continue using Workbench.",
+      "description": "Sign in to this account again (Claude or ChatGPT) to continue using Workbench.",
       "taskAffected": "Task affected",
       "technicalDetails": "Technical details",
       "goToSettings": "Go to settings"

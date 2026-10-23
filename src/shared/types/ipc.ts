@@ -71,6 +71,7 @@ import type {
 } from './terminal';
 import type {
   ClaudeProfileSettings,
+  CodexAccountsInfo,
   ClaudeProfile,
   ClaudeAutoSwitchSettings,
   ClaudeUsageSnapshot,
@@ -268,6 +269,12 @@ export interface ElectronAPI {
   deleteClaudeProfile: (profileId: string) => Promise<IPCResult>;
   loginClaudeAccount: (profileId?: string) => Promise<IPCResult>;
   redetectClaudeAccounts: () => Promise<IPCResult<ClaudeProfileSettings>>;
+  listCodexAccounts: () => Promise<IPCResult<CodexAccountsInfo>>;
+  loginCodexAccount: (accountId?: string) => Promise<IPCResult>;
+  loginCodexWithApiKey: (apiKey: string) => Promise<IPCResult>;
+  renameCodexAccount: (accountId: string, name: string) => Promise<IPCResult>;
+  signOutCodexAccount: (accountId: string) => Promise<IPCResult>;
+  getCodexModels: () => Promise<IPCResult<Record<string, string>>>;
   renameClaudeProfile: (profileId: string, newName: string) => Promise<IPCResult>;
   setActiveClaudeProfile: (profileId: string) => Promise<IPCResult>;
   /** Switch terminal to use a different Claude profile (restarts Claude with new config) */

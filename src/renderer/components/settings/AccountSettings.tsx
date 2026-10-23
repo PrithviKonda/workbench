@@ -12,6 +12,7 @@ import { cn } from '../../lib/utils';
 import { SettingsSection } from './SettingsSection';
 import { SettingsRow, SettingsRows } from './SettingsRow';
 import { ClaudeAccountsSection } from './ClaudeAccountsSection';
+import { CodexAccountsSection } from './CodexAccountsSection';
 import { ProfileList } from './ProfileList';
 import { ProjectMetricsSection } from './ProjectMetricsSection';
 import { useClaudeAccounts } from './hooks/useClaudeAccounts';
@@ -109,6 +110,8 @@ export function AccountSettings({ isOpen }: AccountSettingsProps) {
         <SettingsRows>
           <ClaudeAccountsSection />
           <ProfileList />
+          {/* ChatGPT/OpenAI accounts for the Codex engine */}
+          <CodexAccountsSection />
 
           {/* Automatic account switching: once there's another account to switch to */}
           {totalAccounts > 1 && (

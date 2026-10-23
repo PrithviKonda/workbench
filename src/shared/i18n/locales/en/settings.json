@@ -594,6 +594,17 @@
       "liveAgentNoProject": "Select a project to show a live graph of its Claude Code sessions in its agent windows",
       "liveAgentFailed": "Live agent could not be changed: {{error}}",
       "liveAgentHooksFailed": "The graph works from the session transcripts only. {{error}}"
+    },
+    "engine": {
+      "title": "AI engine",
+      "label": "Agent CLI",
+      "description": "Runs tasks, the Claude page, agent windows and naming. Automatic uses Claude Code when a Claude account is signed in, otherwise Codex with a ChatGPT or OpenAI account",
+      "options": {
+        "auto": "Automatic",
+        "claude": "Claude Code",
+        "codex": "Codex (ChatGPT)"
+      },
+      "codexModel": "{{tier}} · {{model}}"
     }
   },
   "claudeAccounts": {
@@ -643,6 +654,33 @@
       "signedIn": "Signed in",
       "notSignedIn": "No new sign-in was found",
       "failedToStart": "Couldn't open a terminal for Claude Code's sign-in"
+    }
+  },
+  "codexAccounts": {
+    "add": "Add ChatGPT account",
+    "addButton": "Add",
+    "addDescription": "Opens a terminal with codex login to sign in with ChatGPT",
+    "apiKey": "OpenAI API key",
+    "apiKeyDescription": "Sign Codex in with an API key instead of a ChatGPT account",
+    "apiKeyPlaceholder": "sk-...",
+    "apiKeySave": "Sign in",
+    "apiKeySaved": "Signed in with the API key",
+    "signInAgain": "Sign in again",
+    "signOut": "Sign out",
+    "rename": "Rename",
+    "menu": "Actions for {{name}}",
+    "inUse": "In use",
+    "rateLimited": "Rate limited",
+    "usage": "Session {{session}}% · Weekly {{weekly}}%",
+    "weeklyUsage": "Weekly {{weekly}}%",
+    "apiKeyAccount": "OpenAI API key",
+    "cliMissing": "Codex CLI isn't installed. Install it with npm install -g @openai/codex",
+    "login": {
+      "waiting": "Finish signing in in the terminal",
+      "signedInAs": "Signed in as {{email}}",
+      "signedIn": "Signed in",
+      "notSignedIn": "No new sign-in was found",
+      "failedToStart": "Couldn't open a terminal for Codex's sign-in"
     }
   }
 }
