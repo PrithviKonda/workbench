@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import { mkdir } from 'fs/promises';
 import path from 'path';
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron';
 import { IPC_CHANNELS } from '../../shared/constants';
@@ -313,6 +314,8 @@ export function registerTerminalHandlers(
       const codex = await getToolInfoAsync('codex', { refreshIfMissing: true });
       if (!codex.found || !codex.path) return { success: false, error: 'Codex CLI not found. Install it with: npm install -g @openai/codex' };
       const home = (accountId && getCodexAccount(accountId)?.configDir) || nextCodexHome();
+      // Codex refuses a CODEX_HOME that doesn't exist yet
+      await mkdir(home, { recursive: true });
       const deviceAuth = process.env.WORKBENCH_CODEX_DEVICE_AUTH === '1' ? ' --device-auth' : '';
       if (isWindows() && !isWslRuntime()) {
         const env: NodeJS.ProcessEnv = { ...process.env, CODEX_HOME: home };
@@ -333,7 +336,9 @@ export function registerTerminalHandlers(
     try {
       const key = typeof apiKey === 'string' ? apiKey.trim() : '';
       if (!key) return { success: false, error: 'Enter an OpenAI API key' };
-      const result = await runCodexCommand(['login', '--with-api-key'], nextCodexHome(), `${key}\n`);
+      const home = nextCodexHome();
+      await mkdir(home, { recursive: true });
+      const result = await runCodexCommand(['login', '--with-api-key'], home, `${key}\n`);
       return result.code === 0 ? { success: true } : { success: false, error: result.output.trim() || `codex login exited with code ${result.code}` };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) };
