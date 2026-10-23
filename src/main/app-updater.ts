@@ -33,7 +33,7 @@ import { isMacOS } from './platform';
 import { readSettingsFile, writeSettingsFile } from './settings-utils';
 
 // GitHub repo info for API calls
-const GITHUB_OWNER = 'proactive-agent';
+const GITHUB_OWNER = 'PrithviKonda';
 const GITHUB_REPO = 'workbench';
 
 // Debug mode - DEBUG_UPDATER=true or development mode

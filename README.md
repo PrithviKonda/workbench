@@ -40,6 +40,15 @@ Every creative builder has a graveyard of ideas. Each idea wants an evening you 
 
 Most tools in this space write their own agent harness, and none of them outperforms the one you already have installed. You see it in the results: a loop that plans worse, retries more, and spends more than Claude Code does on the same task. So why build another harness when one already works? Workbench runs on Claude Code rather than competing with it, using the same CLI with your own accounts, subagents, skills, and MCP servers, and spending its own effort on everything around the session instead.
 
+## Download
+
+Get the latest `Workbench-*-mac-arm64.dmg` (Apple Silicon) or `mac-x64` (Intel) from [Releases](https://github.com/PrithviKonda/workbench/releases), open it and drag Workbench to Applications. The app isn't signed by Apple yet, so the first launch says Apple can't verify it: open System Settings > Privacy & Security and click **Open Anyway** (once). Then, in Workbench:
+
+1. Settings > Updates: install the Codex CLI (ChatGPT) and/or the Claude Code CLI.
+2. Settings > Accounts: add a ChatGPT account, an OpenAI API key, or a Claude account.
+
+Settings > Agents picks the engine; Automatic uses Claude Code when a Claude account is signed in, otherwise Codex. The app updates itself from this repo's releases.
+
 ## Run with Docker
 
 The image runs the full desktop app in a container and shows it in your browser, with the Claude Code and Codex CLIs preinstalled.

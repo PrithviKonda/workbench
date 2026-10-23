@@ -107,7 +107,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "proactive-agent",
+        "owner": "PrithviKonda",
         "repo": "workbench"
       }
     ],
