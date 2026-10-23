@@ -233,6 +233,8 @@ function buildSystemPrompt(config: TaskRunConfig, specDirRelative: string, paral
 - When the work is done, commit it in this worktree with a descriptive message. Don't push.
 - End with a short summary for the reviewer: what changed, how you verified it, and any assumptions or follow-ups.`,
   ];
+  const instructions = config.settings.customInstructions?.trim();
+  if (instructions) sections.push(`## The user's instructions (follow these over the defaults above)\n${instructions}`);
   if (config.graphifyPrompt) sections.push(config.graphifyPrompt);
   if (config.selfImprovePrompt) sections.push(config.selfImprovePrompt);
   if (parallelTasksPrompt) sections.push(parallelTasksPrompt);

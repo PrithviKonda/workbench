@@ -605,6 +605,20 @@
         "codex": "Codex (ChatGPT)"
       },
       "codexModel": "{{tier}} · {{model}}"
+    },
+    "instructions": {
+      "title": "Your instructions",
+      "label": "Instructions for every agent",
+      "description": "Added to every task and the Claude page, on Claude Code and Codex. For one project only, use its CLAUDE.md or AGENTS.md",
+      "placeholder": "For example: Use pnpm, not npm. Write tests with Vitest. Keep commits small.",
+      "codex": "Codex",
+      "openConnectors": "Open Connectors",
+      "mcp": "MCP servers",
+      "mcpDescription": "Servers for tasks are on the Connectors page. Servers set up in Claude Code or Codex load too",
+      "skills": "Skills",
+      "skillsDescription": "Agents use the skills installed in Claude Code or Codex. How to add them",
+      "plugins": "Plugins",
+      "pluginsDescription": "Plugins installed in Claude Code or Codex load in every task. How to add them"
     }
   },
   "claudeAccounts": {

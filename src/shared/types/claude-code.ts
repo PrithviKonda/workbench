@@ -41,6 +41,8 @@ export interface ClaudeCodeTaskSettings {
   fallbackModel?: string;
   /** Engine, model and effort per kind of work and task size (Settings > Agents > Model routing) */
   modelRouting?: ModelRouting;
+  /** The user's own instructions, added to every task's and the Claude page's system prompt (both engines) */
+  customInstructions?: string;
 }
 
 // =============================================================================

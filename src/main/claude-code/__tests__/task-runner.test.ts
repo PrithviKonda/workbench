@@ -364,6 +364,15 @@ describe('ClaudeTaskRun', () => {
     expect(prompt).not.toContain('type: feedback');
   });
 
+  it("adds the user's own instructions to the system prompt", async () => {
+    triageMock.mockResolvedValue({ triage: triage() });
+    scripts.push({ messages: [result('s14')] });
+    await makeRun({ settings: { ...DEFAULT_CLAUDE_CODE_TASK_SETTINGS, validation: false, customInstructions: 'Use pnpm, not npm.' } }).run();
+    const prompt = argValue(spawned[0].args, '--append-system-prompt') ?? '';
+    expect(prompt).toContain("## The user's instructions");
+    expect(prompt).toContain('Use pnpm, not npm.');
+  });
+
   it("tells the session to save what it learns once the project's switch is on", async () => {
     triageMock.mockResolvedValue({ triage: triage() });
     scripts.push({ messages: [result('s13')] });

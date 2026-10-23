@@ -18,6 +18,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { routeFor } from '../claude-code/routing';
+import { readSettingsFileAsync } from '../settings-utils';
 import { resolveClaudeEnv } from '../claude-code/env';
 import { startClaudeProcess } from '../claude-code/process';
 import type { ClaudeStreamMessage, ClaudeUserContentBlock } from '../claude-code/stream-types';
@@ -28,7 +29,7 @@ import { appLog } from '../app-logger';
 import { INSIGHTS_ERROR_CODES, formatInsightsError } from '../../shared/constants/insights';
 import { CLAUDE_EFFORTS, CLAUDE_MODEL_ALIASES } from '../../shared/types/claude-code';
 import type { ClaudeEffort, ClaudeModelAlias } from '../../shared/types/claude-code';
-import type { ImageAttachment } from '../../shared/types';
+import type { AppSettings, ImageAttachment } from '../../shared/types';
 import type { GraphifyAgentContext } from '../graphify';
 import { TASK_TOOLS_SERVER_NAME, toBridgeServer, type TaskToolsMcpServer, type TaskToolsStdioServer } from './task-tools-mcp';
 // The bridge's source, bundled as text and written next to the turn's other temp files
@@ -352,7 +353,8 @@ export async function runInsights(config: InsightsRunConfig, onStream?: Insights
     const tempDir = await mkdtemp(join(tmpdir(), 'workbench-insights-'));
     const systemPromptFile = join(tempDir, 'system-prompt.md');
     const basePrompt = buildSystemPrompt(projectDir, { taskTools: !!offeredTaskTools });
-    const systemPrompt = graphify ? `${basePrompt}\n\n${graphify.commandPrompt}` : basePrompt;
+    const instructions = (((await readSettingsFileAsync()) ?? {}) as Partial<AppSettings>).claudeCodeTasks?.customInstructions?.trim();
+    const systemPrompt = [basePrompt, instructions && `## The user's instructions\n${instructions}`, graphify?.commandPrompt].filter(Boolean).join('\n\n');
     await writeFile(systemPromptFile, systemPrompt, 'utf-8');
     // The task tools' URL and token go through a file too, so they aren't in the process list
     let mcpConfigFile: string | undefined;

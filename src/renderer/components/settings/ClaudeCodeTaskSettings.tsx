@@ -7,6 +7,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Input } from '../ui/input';
+import { Button } from '../ui/button';
+import { ExternalLink } from '../ui/external-link';
 import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { SettingsSection } from './SettingsSection';
@@ -37,13 +39,22 @@ import { useLiveAgentStore } from '../../stores/live-agent-store';
 interface ClaudeCodeTaskSettingsProps {
   settings: AppSettings;
   onSettingsChange: (settings: AppSettings) => void;
+  /** Opens the Connectors page (MCP servers for tasks) */
+  onOpenConnectors?: () => void;
 }
+
+/** Where each CLI documents its own MCP servers, skills and plugins */
+const EXTENSION_DOCS = {
+  mcp: { claude: 'https://code.claude.com/docs/en/mcp', codex: 'https://developers.openai.com/codex/mcp' },
+  skills: { claude: 'https://code.claude.com/docs/en/skills', codex: 'https://developers.openai.com/codex/skills' },
+  plugins: { claude: 'https://code.claude.com/docs/en/plugins', codex: 'https://developers.openai.com/codex/plugins' },
+} as const;
 
 /** Fallback model choices (`--fallback-model`); 'none' leaves it unset */
 const FALLBACK_OPTIONS = ['none', 'sonnet', 'haiku', 'opus'] as const;
 
 /** Task execution, permissions, agent windows and limits sections of the Agents page */
-export function ClaudeCodeTaskSettings({ settings, onSettingsChange }: ClaudeCodeTaskSettingsProps) {
+export function ClaudeCodeTaskSettings({ settings, onSettingsChange, onOpenConnectors }: ClaudeCodeTaskSettingsProps) {
   const { t } = useTranslation('settings');
   const stored = settings.claudeCodeTasks ?? {};
   const current: TaskSettings = { ...DEFAULT_CLAUDE_CODE_TASK_SETTINGS, ...stored };
@@ -99,6 +110,10 @@ export function ClaudeCodeTaskSettings({ settings, onSettingsChange }: ClaudeCod
     </Select>
   );
 
+  // Saved when the box loses focus, not on every keystroke
+  const [instructions, setInstructions] = useState(current.customInstructions ?? '');
+  useEffect(() => setInstructions(current.customInstructions ?? ''), [current.customInstructions]);
+
   const fallbackValue = current.fallbackModel && current.fallbackModel.trim() !== '' ? current.fallbackModel : 'none';
 
   return (
@@ -117,6 +132,35 @@ export function ClaudeCodeTaskSettings({ settings, onSettingsChange }: ClaudeCod
               ]}
             />
           </SettingsRow>
+        </SettingsRows>
+      </SettingsSection>
+
+      <SettingsSection title={t('claudeCode.instructions.title')}>
+        <SettingsRows>
+          <SettingsRow label={t('claudeCode.instructions.label')} description={t('claudeCode.instructions.description')} htmlFor="agent-instructions" stacked>
+            <textarea
+              id="agent-instructions"
+              rows={5}
+              className="field-border w-full resize-y rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-(--field-placeholder) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              placeholder={t('claudeCode.instructions.placeholder')}
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              onBlur={() => {
+                if (instructions !== (current.customInstructions ?? '')) update({ customInstructions: instructions.trim() ? instructions : undefined });
+              }}
+            />
+          </SettingsRow>
+          {(Object.keys(EXTENSION_DOCS) as Array<keyof typeof EXTENSION_DOCS>).map((kind) => (
+            <SettingsRow key={kind} label={t(`claudeCode.instructions.${kind}`)} description={t(`claudeCode.instructions.${kind}Description`)}>
+              <div className="flex items-center gap-3 text-sm">
+                {kind === 'mcp' && onOpenConnectors && (
+                  <Button variant="outline" size="sm" onClick={onOpenConnectors}>{t('claudeCode.instructions.openConnectors')}</Button>
+                )}
+                <ExternalLink href={EXTENSION_DOCS[kind].claude}>{t('claudeCode.engine.options.claude')}</ExternalLink>
+                <ExternalLink href={EXTENSION_DOCS[kind].codex}>{t('claudeCode.instructions.codex')}</ExternalLink>
+              </div>
+            </SettingsRow>
+          ))}
         </SettingsRows>
       </SettingsSection>
 

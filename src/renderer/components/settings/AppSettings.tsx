@@ -225,7 +225,7 @@ export function AppSettingsDialog({ open, onOpenChange, initialSection, initialP
       case 'accounts':
         return <AccountSettings settings={settings} onSettingsChange={setSettings} isOpen={open} />;
       case 'agents':
-        return <ClaudeCodeTaskSettings settings={settings} onSettingsChange={setSettings} />;
+        return <ClaudeCodeTaskSettings settings={settings} onSettingsChange={setSettings} onOpenConnectors={() => setAppPage('connectors')} />;
       case 'connectors':
         return <ConnectorsSettings settings={settings} onSettingsChange={setSettings} />;
       case 'devtools':
