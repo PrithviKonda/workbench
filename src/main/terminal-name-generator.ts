@@ -47,6 +47,7 @@ class TerminalNameGenerator extends EventEmitter {
 
     try {
       const result = await runClaudeText({
+        step: 'helpers',
         prompt,
         systemPrompt: SYSTEM_PROMPT,
         model: 'haiku',

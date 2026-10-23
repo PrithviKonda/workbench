@@ -24,7 +24,7 @@ import { randomUUID } from 'crypto';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'fs';
 import os from 'os';
 import path from 'path';
-import { pickEngine, resolveClaudeEnv } from './env';
+import { pickEngine, resolveClaudeEnv, type EngineKind } from './env';
 import { CODEX_TASK_LIST_SERVER, codexModelFor, codexTaskListTools, readCodexModels } from './codex';
 import { defaultCodexHome, findCodexRollout, getBestCodexAccount } from '../claude-profile/codex-accounts';
 import { openToolsSession } from '../insights/task-tools-server';
@@ -51,6 +51,7 @@ import {
   type ClaudeToolResultBlock,
   type ClaudeUserContentBlock,
 } from './stream-types';
+import { resolveModelRoute } from '../../shared/types/claude-code';
 import type {
   ClaudeCodeTaskSettings,
   ClaudeEffort,
@@ -435,8 +436,11 @@ export class ClaudeTaskRun {
   /** Run a Claude Code session step; returns an outcome when the run must stop */
   private async runSessionPhase(name: Exclude<ClaudeRunPhaseName, 'triage'>): Promise<TaskRunOutcome | null> {
     const triage = this.info.triage ?? fixedTriage(this.config.settings, this.config.title, 'fallback', 'No triage recorded');
-    let model: string = name === 'plan' ? (triage.model === 'fable' ? 'fable' : 'opus') : triage.model;
-    const effort: ClaudeEffort = name === 'plan' && (triage.effort === 'low' || triage.effort === 'medium') ? 'high' : triage.effort;
+    // Settings > Agents > Model routing for this step and the task's size; unset fields stay automatic
+    const route = resolveModelRoute(this.config.settings.modelRouting, name === 'revise' ? 'implement' : name, triage.scope);
+    let model: string = route.model ?? (name === 'plan' ? (triage.model === 'fable' ? 'fable' : 'opus') : triage.model);
+    const effort: ClaudeEffort = route.effort
+      ?? (name === 'plan' && (triage.effort === 'low' || triage.effort === 'medium') ? 'high' : triage.effort);
     const logPhase: TaskLogPhase = name === 'plan' ? 'planning' : name === 'validate' ? 'validation' : 'coding';
 
     // A session lives in the runtime it ran in (native or WSL); after a switch, start a new one
@@ -451,7 +455,7 @@ export class ClaudeTaskRun {
       this.saveInfo();
     }
     // Same for the agent CLI: a Claude Code session can't continue in Codex or the other way round
-    const engine = await pickEngine(this.config.profileId ?? this.info.profileId);
+    const engine = route.engine ?? (await pickEngine(this.config.profileId ?? this.info.profileId));
     if (this.info.sessionId && (this.info.engine ?? 'claude') !== engine) {
       this.emitLog(`This step runs in ${engine === 'codex' ? 'Codex' : 'Claude Code'}, so it starts a new session`);
       this.info.sessionId = undefined;
@@ -506,6 +510,7 @@ export class ClaudeTaskRun {
       effort,
       sessionId,
       resume: !!resumeSessionId,
+      engine,
       input: this.buildInput(name, continuing, !!resumeSessionId),
       jsonSchema: name === 'plan' ? PLAN_SCHEMA : name === 'validate' ? VALIDATION_SCHEMA : undefined,
       logPhase,
@@ -672,6 +677,7 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
     effort: ClaudeEffort;
     sessionId: string;
     resume: boolean;
+    engine: EngineKind;
     input: ClaudeUserContentBlock[];
     jsonSchema?: Record<string, unknown>;
     logPhase: TaskLogPhase;
@@ -681,6 +687,7 @@ Apply them, verify with ${verificationHint(triage)}, and commit the result.`;
     // Stay on the profile that holds the session transcript, unless the caller switched profiles
     // (rate-limit swap); then the transcript is copied to the new profile below
     const { command, env, profileId, engine } = await resolveClaudeEnv({
+      engine: params.engine,
       profileId: this.config.profileId ?? (params.resume ? this.info.profileId : undefined),
       extraEnv: {
         ...(this.config.extraEnv ?? {}),

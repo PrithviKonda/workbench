@@ -150,6 +150,7 @@ export async function triageTask(input: TriageInput): Promise<{ triage: TaskTria
   const prompt = `Allowed models: ${allowedModels.join(', ')}.\n\n<task>\n${input.description}\n</task>${attachments}`;
 
   const result = await runClaudeText({
+    step: 'triage',
     prompt,
     appendSystemPrompt: TRIAGE_SYSTEM_PROMPT,
     model: settings.triageModel,

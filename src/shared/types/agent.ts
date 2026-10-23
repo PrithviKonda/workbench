@@ -260,6 +260,12 @@ export interface DetectedClaudeCodeAccount {
   values: DetectedClaudeCodeValue[];
 }
 
+/** Codex's models: the one each Claude tier runs as, and every listed model */
+export interface CodexModelsInfo {
+  tiers: Record<string, string>;
+  models: Array<{ slug: string; displayName: string }>;
+}
+
 /** ChatGPT/OpenAI (Codex) accounts for Settings > Accounts */
 export interface CodexAccountsInfo {
   accounts: ClaudeProfile[];

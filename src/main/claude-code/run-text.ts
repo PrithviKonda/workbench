@@ -9,7 +9,8 @@
 
 import { resolveClaudeEnv } from './env';
 import { startClaudeProcess } from './process';
-import type { ClaudeEffort, ClaudeModelAlias } from '../../shared/types/claude-code';
+import type { ClaudeEffort, ClaudeModelAlias, RouteStep } from '../../shared/types/claude-code';
+import { routeFor } from './routing';
 import type { ClaudeUserContentBlock } from './stream-types';
 
 /** Built-in tools for read-only exploration of a project */
@@ -38,6 +39,10 @@ export interface RunClaudeTextOptions {
   abortSignal?: AbortSignal;
   /** Claude profile to use (defaults to the best available one) */
   profileId?: string;
+  /** Kind of work, so Settings > Agents > Model routing can pick the engine, model and effort */
+  step?: RouteStep;
+  /** The task's spec dir, for routes that differ by task size */
+  specDir?: string;
 }
 
 export interface RunClaudeTextResult {
@@ -57,7 +62,10 @@ class ClaudeCodeRunError extends Error {
 
 /** Run Claude Code once and return its answer */
 export async function runClaudeText(options: RunClaudeTextOptions): Promise<RunClaudeTextResult> {
-  const { command, env, engine } = await resolveClaudeEnv({ profileId: options.profileId });
+  const route = options.step ? await routeFor(options.step, options.specDir) : {};
+  const model = route.model ?? options.model ?? 'haiku';
+  const effort = route.effort ?? options.effort;
+  const { command, env, engine } = await resolveClaudeEnv({ profileId: options.profileId, engine: route.engine });
   const tools = options.tools ?? [];
   const usesContentBlocks = typeof options.prompt !== 'string';
 
@@ -68,12 +76,12 @@ export async function runClaudeText(options: RunClaudeTextOptions): Promise<RunC
     '--permission-mode', 'dontAsk',
     '--permission-prompts', 'none',
     '--strict-mcp-config',
-    '--model', options.model ?? 'haiku',
+    '--model', model,
     '--tools', tools.length > 0 ? tools.join(',') : '',
   ];
   if (!options.slashCommands) args.push('--disable-slash-commands');
   if (usesContentBlocks) args.push('--input-format', 'stream-json', '--verbose');
-  if (options.effort) args.push('--effort', options.effort);
+  if (effort) args.push('--effort', effort);
   if (options.allowedTools?.length) args.push('--allowedTools', ...options.allowedTools);
   if (options.maxTurns) args.push('--max-turns', String(options.maxTurns));
   if (options.jsonSchema) args.push('--json-schema', JSON.stringify(options.jsonSchema));

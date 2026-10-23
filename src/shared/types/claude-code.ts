@@ -39,6 +39,58 @@ export interface ClaudeCodeTaskSettings {
   allowFable: boolean;
   /** Fallback model chain when the chosen model is overloaded (`--fallback-model`) */
   fallbackModel?: string;
+  /** Engine, model and effort per kind of work and task size (Settings > Agents > Model routing) */
+  modelRouting?: ModelRouting;
+}
+
+// =============================================================================
+// Model routing
+// =============================================================================
+
+/** Kinds of work a model route applies to */
+export type RouteStep = 'triage' | 'plan' | 'implement' | 'validate' | 'git' | 'merge' | 'insights' | 'helpers';
+/** Steps of a task, routed per task size */
+export const SIZED_ROUTE_STEPS: readonly RouteStep[] = ['plan', 'implement', 'validate', 'git', 'merge'] as const;
+/** Steps with one route for everything (triage runs before the size is known; the rest aren't tasks) */
+export const UNSIZED_ROUTE_STEPS: readonly RouteStep[] = ['triage', 'insights', 'helpers'] as const;
+
+/** Task sizes routes can differ by (triage's "trivial" counts as small) */
+export type RouteSize = 'small' | 'medium' | 'large';
+export const ROUTE_SIZES: readonly RouteSize[] = ['small', 'medium', 'large'] as const;
+
+/** Engine, model and effort for one step; an unset field stays automatic */
+export interface ModelRoute {
+  engine?: 'claude' | 'codex';
+  /** Claude alias (haiku, sonnet, opus, fable) or a Codex model name */
+  model?: string;
+  effort?: ClaudeEffort;
+}
+
+/** A step's routes: `all` for every size, a size's own route overrides it field by field */
+export type StepRoutes = Partial<Record<'all' | RouteSize, ModelRoute>>;
+export type ModelRouting = Partial<Record<RouteStep, StepRoutes>>;
+
+/** Whether a model name is Claude's (an alias or a claude-* id); anything else is a Codex model */
+export function isClaudeModel(model: string): boolean {
+  return (CLAUDE_MODEL_ALIASES as readonly string[]).includes(model.replace(/\[.*\]$/, '')) || model.startsWith('claude');
+}
+
+/** The route for one step of a task of the given size (sizes apply to sized steps only) */
+export function resolveModelRoute(routing: ModelRouting | undefined, step: RouteStep, scope?: TaskScope): ModelRoute {
+  const routes = routing?.[step];
+  if (!routes) return {};
+  const size: RouteSize | undefined = !scope || !SIZED_ROUTE_STEPS.includes(step) ? undefined : scope === 'trivial' ? 'small' : scope;
+  const merged: ModelRoute = { ...routes.all };
+  const own = size ? routes[size] : undefined;
+  for (const key of ['engine', 'model', 'effort'] as const) {
+    if (own?.[key]) (merged as Record<string, unknown>)[key] = own[key];
+  }
+  // A Codex model only runs on Codex; Claude can't run one (Codex maps Claude's tiers itself)
+  if (merged.model && !isClaudeModel(merged.model)) {
+    if (!merged.engine) merged.engine = 'codex';
+    else if (merged.engine === 'claude') delete merged.model;
+  }
+  return merged;
 }
 
 export const DEFAULT_CLAUDE_CODE_TASK_SETTINGS: ClaudeCodeTaskSettings = {

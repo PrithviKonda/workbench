@@ -131,10 +131,23 @@ const SelectItem = React.forwardRef<
 ));
 SelectItem.displayName = SelectPrimitive.Item.displayName;
 
+const SelectGroup = SelectPrimitive.Group;
+
+/** Heading of a group of items */
+const SelectLabel = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Label>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label>
+>(({ className, ...props }, ref) => (
+  <SelectPrimitive.Label ref={ref} className={cn('px-2 pb-1 pt-2 text-xs text-muted-foreground', className)} {...props} />
+));
+SelectLabel.displayName = SelectPrimitive.Label.displayName;
+
 export {
   Select,
   SelectValue,
   SelectTrigger,
   SelectContent,
-  SelectItem
+  SelectItem,
+  SelectGroup,
+  SelectLabel
 };

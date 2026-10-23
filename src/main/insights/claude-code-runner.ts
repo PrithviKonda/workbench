@@ -17,6 +17,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { routeFor } from '../claude-code/routing';
 import { resolveClaudeEnv } from '../claude-code/env';
 import { startClaudeProcess } from '../claude-code/process';
 import type { ClaudeStreamMessage, ClaudeUserContentBlock } from '../claude-code/stream-types';
@@ -321,7 +322,9 @@ export async function runInsights(config: InsightsRunConfig, onStream?: Insights
   try {
     await whenShellRuntimeReady();
     const wsl = getWslInfo();
-    const { command, env, engine } = await resolveClaudeEnv({ profileId: config.profileId });
+    // Settings > Agents > Model routing for the Claude page (unset fields: the page's own choice)
+    const route = await routeFor('insights');
+    const { command, env, engine } = await resolveClaudeEnv({ profileId: config.profileId, engine: route.engine });
     const cli = engine === 'codex' ? 'codex' : 'claude';
     const cliName = engine === 'codex' ? 'Codex CLI' : 'Claude Code CLI';
     if (wsl) {
@@ -367,7 +370,7 @@ export async function runInsights(config: InsightsRunConfig, onStream?: Insights
       const handle = startClaudeProcess({
         command,
         engine,
-        args: buildInsightsArgs(toClaudeModel(config.model), toClaudeEffort(config.thinkingLevel), systemPromptFile, !!graphify, mcpConfigFile),
+        args: buildInsightsArgs(route.model ?? toClaudeModel(config.model), route.effort ?? toClaudeEffort(config.thinkingLevel), systemPromptFile, !!graphify, mcpConfigFile),
         cwd: projectDir,
         env,
         // Document blocks (PDFs) are valid Anthropic content even though the shared type omits them

@@ -24,6 +24,8 @@ export interface MergeResolverConfig {
   model?: string;
   /** Reasoning effort (defaults to 'low') */
   effort?: ClaudeEffort;
+  /** The task's spec dir (model routing by task size) */
+  specDir?: string;
   abortSignal?: AbortSignal;
 }
 
@@ -57,7 +59,7 @@ function stripCodeFence(text: string): string {
 export async function resolveMergeConflict(
   config: MergeResolverConfig,
 ): Promise<MergeResolverResult> {
-  const { systemPrompt, userPrompt, model = 'sonnet', effort = 'low', abortSignal } = config;
+  const { systemPrompt, userPrompt, model = 'sonnet', effort = 'low', specDir, abortSignal } = config;
 
   try {
     const result = await runClaudeText({
@@ -65,6 +67,8 @@ export async function resolveMergeConflict(
       systemPrompt,
       model,
       effort,
+      step: 'merge',
+      specDir,
       timeoutMs: RESOLVE_TIMEOUT_MS,
       abortSignal,
     });
@@ -87,9 +91,10 @@ export async function resolveMergeConflict(
 export function createMergeResolverFn(
   model = 'sonnet',
   effort: ClaudeEffort = 'low',
+  specDir?: string,
 ): MergeResolverCallFn {
   return async (system: string, user: string): Promise<string> => {
-    const result = await resolveMergeConflict({ systemPrompt: system, userPrompt: user, model, effort });
+    const result = await resolveMergeConflict({ systemPrompt: system, userPrompt: user, model, effort, specDir });
     return result.text;
   };
 }

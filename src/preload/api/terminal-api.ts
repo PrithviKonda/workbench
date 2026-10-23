@@ -12,6 +12,7 @@ import type {
   ClaudeProfile,
   ClaudeProfileSettings,
   CodexAccountsInfo,
+  CodexModelsInfo,
   ClaudeUsageSnapshot,
   CreateTerminalWorktreeRequest,
   TerminalWorktreeConfig,
@@ -93,7 +94,7 @@ export interface TerminalAPI {
   loginCodexWithApiKey: (apiKey: string) => Promise<IPCResult>;
   renameCodexAccount: (accountId: string, name: string) => Promise<IPCResult>;
   signOutCodexAccount: (accountId: string) => Promise<IPCResult>;
-  getCodexModels: () => Promise<IPCResult<Record<string, string>>>;
+  getCodexModels: () => Promise<IPCResult<CodexModelsInfo>>;
   getCodexCliInfo: () => Promise<IPCResult<{ found: boolean; version?: string }>>;
   installCodexCli: () => Promise<IPCResult>;
   renameClaudeProfile: (profileId: string, newName: string) => Promise<IPCResult>;
@@ -397,7 +398,7 @@ export const createTerminalAPI = (): TerminalAPI => ({
   signOutCodexAccount: (accountId: string): Promise<IPCResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.CODEX_ACCOUNTS_SIGN_OUT, accountId),
 
-  getCodexModels: (): Promise<IPCResult<Record<string, string>>> =>
+  getCodexModels: (): Promise<IPCResult<CodexModelsInfo>> =>
     ipcRenderer.invoke(IPC_CHANNELS.CODEX_MODELS),
 
   getCodexCliInfo: (): Promise<IPCResult<{ found: boolean; version?: string }>> =>

@@ -532,7 +532,7 @@ export function registerWorktreeHandlers(
         emitProgress('analyzing', 0, 'Starting merge engine');
 
         // AI conflict resolution runs through Claude Code
-        const aiResolverFn = createMergeResolverFn('sonnet', 'low');
+        const aiResolverFn = createMergeResolverFn('sonnet', 'low', specDir);
 
         // Create the merge orchestrator
         const storageDir = path.join(project.path, project.autoBuildPath || '.workbench');
@@ -1473,6 +1473,7 @@ export function registerWorktreeHandlers(
           taskTitle: task.title,
           taskDescription: task.metadata?.userDescription || task.description,
           profileId: project.settings?.claudeProfileId,
+          specDir: path.join(project.path, project.autoBuildPath || '.workbench', DATA_DIR_NAMES.tasks, task.specId),
           dataDir: project.autoBuildPath,
           onProgress: (step, params) =>
             safeSendToRenderer(getMainWindow, IPC_CHANNELS.TASK_MERGE_PR_PROGRESS, taskId, { step, params }),

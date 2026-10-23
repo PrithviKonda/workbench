@@ -53,6 +53,7 @@ async function run(projectPath: string, profileId?: string): Promise<ProjectInde
   const { triageModel } = resolveClaudeCodeTaskSettings(settings.claudeCodeTasks);
 
   await runClaudeText({
+    step: 'helpers',
     prompt: `/init`,
     model: triageModel,
     effort: EFFORT,

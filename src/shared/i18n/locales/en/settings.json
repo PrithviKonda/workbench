@@ -693,5 +693,44 @@
     "update": "Update",
     "refresh": "Refresh",
     "installFailed": "Couldn't start the install"
+  },
+  "modelRouting": {
+    "title": "Model routing",
+    "description": "The engine, model and effort for each kind of work. Automatic keeps the app's choice (triage's pick for tasks)",
+    "size": "Task size",
+    "sizeDescription": "Triage sizes every task; a size's settings replace All sizes where they're set",
+    "sizes": {
+      "all": "All sizes",
+      "small": "Small",
+      "medium": "Medium",
+      "large": "Large"
+    },
+    "otherTitle": "Other work",
+    "automatic": "Automatic",
+    "sameAsAll": "Same as all sizes",
+    "engine": "Engine",
+    "model": "Model",
+    "effort": "Effort",
+    "tiers": "Claude tiers (Codex picks the matching model)",
+    "steps": {
+      "plan": "Planning",
+      "implement": "Coding",
+      "validate": "Review",
+      "git": "Commits and pull requests",
+      "merge": "Merge conflicts",
+      "triage": "Triage",
+      "insights": "Claude page",
+      "helpers": "Helpers"
+    },
+    "stepDescriptions": {
+      "plan": "Explores the code and writes the plan before coding",
+      "implement": "Writes the change, runs the checks and commits; also applies requested changes",
+      "validate": "Runs the checks and reviews the diff with fresh eyes before handing the task to you",
+      "git": "Writes commit messages and pull request titles and descriptions",
+      "merge": "Resolves conflicts when a task or pull request is merged",
+      "triage": "Sizes each task and picks its model and effort",
+      "insights": "The chat on the Claude page",
+      "helpers": "Task and terminal titles, the project index and memory"
+    }
   }
 }

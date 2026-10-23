@@ -128,6 +128,7 @@ async function run(projectPath: string, profileId?: string): Promise<SelfImprove
   if (sessions.length > 0) {
     const existing = await countMemories(projectPath);
     const result = await runClaudeText({
+      step: 'helpers',
       prompt: buildPrompt(sessions, []),
       model: MODEL,
       effort: EFFORT,

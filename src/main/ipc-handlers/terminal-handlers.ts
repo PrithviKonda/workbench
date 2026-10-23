@@ -21,7 +21,7 @@ import { getPathDelimiter, isWindows } from '../platform';
 import { isWslRuntime, toRuntimePath } from '../platform/shell-runtime';
 import { safeSendToRenderer } from './utils';
 import { openTerminalWithCommand } from './claude-code-handlers';
-import type { CodexAccountsInfo } from '../../shared/types';
+import type { CodexAccountsInfo, CodexModelsInfo } from '../../shared/types';
 import {
   codexUsageSummaries,
   defaultCodexHome,
@@ -357,7 +357,7 @@ export function registerTerminalHandlers(
   });
 
   // The Codex model each Claude tier runs as (Settings shows it next to the tier when Codex is the engine)
-  ipcMain.handle(IPC_CHANNELS.CODEX_MODELS, async (): Promise<IPCResult<Record<string, string>>> => {
+  ipcMain.handle(IPC_CHANNELS.CODEX_MODELS, async (): Promise<IPCResult<CodexModelsInfo>> => {
     const models = readCodexModels(getBestCodexAccount()?.configDir ?? defaultCodexHome());
     const tiers: Record<string, string> = {};
     for (const tier of ['haiku', 'sonnet', 'opus', 'fable']) {
@@ -365,7 +365,7 @@ export function registerTerminalHandlers(
       const model = models.find((m) => m.slug === slug);
       if (model) tiers[tier] = model.displayName;
     }
-    return { success: true, data: tiers };
+    return { success: true, data: { tiers, models: models.map(({ slug, displayName }) => ({ slug, displayName })) } };
   });
 
   ipcMain.handle(IPC_CHANNELS.CODEX_CLI_INFO, async (): Promise<IPCResult<{ found: boolean; version?: string }>> => {

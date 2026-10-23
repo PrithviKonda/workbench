@@ -72,6 +72,7 @@ import type {
 import type {
   ClaudeProfileSettings,
   CodexAccountsInfo,
+  CodexModelsInfo,
   ClaudeProfile,
   ClaudeAutoSwitchSettings,
   ClaudeUsageSnapshot,
@@ -274,7 +275,7 @@ export interface ElectronAPI {
   loginCodexWithApiKey: (apiKey: string) => Promise<IPCResult>;
   renameCodexAccount: (accountId: string, name: string) => Promise<IPCResult>;
   signOutCodexAccount: (accountId: string) => Promise<IPCResult>;
-  getCodexModels: () => Promise<IPCResult<Record<string, string>>>;
+  getCodexModels: () => Promise<IPCResult<CodexModelsInfo>>;
   getCodexCliInfo: () => Promise<IPCResult<{ found: boolean; version?: string }>>;
   installCodexCli: () => Promise<IPCResult>;
   renameClaudeProfile: (profileId: string, newName: string) => Promise<IPCResult>;

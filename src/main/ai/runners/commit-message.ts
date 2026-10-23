@@ -115,6 +115,8 @@ export async function generateCommitMessage(config: CommitMessageConfig): Promis
       systemPrompt: SYSTEM_PROMPT,
       model: config.model ?? 'haiku',
       effort: config.effort ?? 'low',
+      step: 'git',
+      specDir: config.specDir,
       timeoutMs: COMMIT_MESSAGE_TIMEOUT_MS,
     });
     const text = result.text.trim();

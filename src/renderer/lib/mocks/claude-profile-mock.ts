@@ -31,7 +31,7 @@ export const claudeProfileMock = {
   loginCodexWithApiKey: async () => ({ success: true }),
   renameCodexAccount: async () => ({ success: true }),
   signOutCodexAccount: async () => ({ success: true }),
-  getCodexModels: async () => ({ success: true, data: {} }),
+  getCodexModels: async () => ({ success: true, data: { tiers: {}, models: [] } }),
   getCodexCliInfo: async () => ({ success: true, data: { found: false } }),
   installCodexCli: async () => ({ success: true }),
 

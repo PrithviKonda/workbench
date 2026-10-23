@@ -30,6 +30,8 @@ export interface MergePRConfig {
   taskDescription?: string;
   /** Claude profile for the merge agent */
   profileId?: string;
+  /** The task's spec dir (model routing by task size) */
+  specDir?: string;
   /** Workbench's data folder, ignored when checking for uncommitted changes */
   dataDir?: string;
   onProgress?: (step: MergePRStep, params?: Record<string, string | number>) => void;
@@ -160,6 +162,7 @@ export async function mergePR(config: MergePRConfig): Promise<MergePRResult> {
       taskTitle: config.taskTitle,
       taskDescription: config.taskDescription,
       profileId: config.profileId,
+      specDir: config.specDir,
     };
     try {
       onProgress?.('resolving', { count: conflictedFiles.length });

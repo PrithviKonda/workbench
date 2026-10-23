@@ -193,6 +193,8 @@ You can inspect the changes with \`git diff ${config.baseBranch}...HEAD\` or by 
       systemPrompt: SYSTEM_PROMPT,
       model: config.model ?? 'sonnet',
       effort: config.effort ?? 'low',
+      step: 'git',
+      specDir: config.specDir,
       cwd: config.worktreePath,
       tools: [...READ_ONLY_TOOLS, 'Bash'],
       allowedTools: ['Bash(git diff *)', 'Bash(git log *)', 'Bash(git show *)'],

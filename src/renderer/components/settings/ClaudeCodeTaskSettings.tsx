@@ -10,6 +10,7 @@ import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { SettingsSection } from './SettingsSection';
+import { ModelRoutingSettings } from './ModelRoutingSettings';
 import { SegmentedControl, SettingsRow, SettingsRows } from './SettingsRow';
 import {
   DEFAULT_MAX_TERMINALS,
@@ -73,7 +74,7 @@ export function ClaudeCodeTaskSettings({ settings, onSettingsChange }: ClaudeCod
   useEffect(() => {
     if (engine !== 'codex') return;
     void window.electronAPI.getCodexModels().then((result) => {
-      if (result.success && result.data) setCodexTiers(result.data);
+      if (result.success && result.data) setCodexTiers(result.data.tiers);
     });
   }, [engine]);
   const modelLabel = (model: ClaudeModelAlias) => {
@@ -118,6 +119,8 @@ export function ClaudeCodeTaskSettings({ settings, onSettingsChange }: ClaudeCod
           </SettingsRow>
         </SettingsRows>
       </SettingsSection>
+
+      <ModelRoutingSettings settings={settings} onSettingsChange={onSettingsChange} />
 
       <SettingsSection title={t('claudeCode.execution.title')}>
         <SettingsRows>

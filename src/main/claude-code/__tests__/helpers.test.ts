@@ -3,7 +3,7 @@ import { buildMcpConfig } from '../mcp-config';
 import { resolveClaudeCodeTaskSettings } from '../settings';
 import { applyPlanningPolicy, fixedTriage } from '../triage';
 import { isClaudeRunFinished } from '../task-runner';
-import { DEFAULT_CLAUDE_CODE_TASK_SETTINGS } from '../../../shared/types/claude-code';
+import { DEFAULT_CLAUDE_CODE_TASK_SETTINGS, resolveModelRoute, type ModelRouting } from '../../../shared/types/claude-code';
 
 describe('buildMcpConfig', () => {
   it('maps built-in and tested custom connectors to --mcp-config servers', () => {
@@ -55,5 +55,33 @@ describe('isClaudeRunFinished', () => {
     expect(isClaudeRunFinished(run([{ name: 'validate', ...done, isError: true }]), true)).toBe(false);
     expect(isClaudeRunFinished(run([{ name: 'validate', startedAt: 'a' }]), true)).toBe(false);
     expect(isClaudeRunFinished(null, true)).toBe(false);
+  });
+});
+
+describe('resolveModelRoute', () => {
+  const routing: ModelRouting = {
+    plan: { all: { engine: 'claude', model: 'opus', effort: 'high' } },
+    implement: { all: { model: 'gpt-6.1-sol' }, large: { effort: 'xhigh' } },
+    validate: { all: { model: 'opus', effort: 'xhigh' }, small: { model: 'sonnet', effort: 'low' } },
+    git: { all: { engine: 'claude', model: 'haiku' } },
+    merge: { all: { model: 'gpt-6-sol' }, medium: { engine: 'claude' } },
+    triage: { all: { model: 'haiku' }, large: { model: 'opus' } },
+  };
+
+  it('applies a size over all sizes, field by field', () => {
+    expect(resolveModelRoute(routing, 'plan', 'medium')).toEqual({ engine: 'claude', model: 'opus', effort: 'high' });
+    expect(resolveModelRoute(routing, 'validate', 'trivial')).toEqual({ model: 'sonnet', effort: 'low' });
+    expect(resolveModelRoute(routing, 'validate', 'large')).toEqual({ model: 'opus', effort: 'xhigh' });
+    expect(resolveModelRoute(routing, 'git', undefined)).toEqual({ engine: 'claude', model: 'haiku' });
+    expect(resolveModelRoute(routing, 'insights', 'large')).toEqual({});
+  });
+
+  it('runs Codex models on Codex and never on Claude', () => {
+    expect(resolveModelRoute(routing, 'implement', 'large')).toEqual({ engine: 'codex', model: 'gpt-6.1-sol', effort: 'xhigh' });
+    expect(resolveModelRoute(routing, 'merge', 'medium')).toEqual({ engine: 'claude' });
+  });
+
+  it('ignores sizes for steps that have none', () => {
+    expect(resolveModelRoute(routing, 'triage', 'large')).toEqual({ model: 'haiku' });
   });
 });

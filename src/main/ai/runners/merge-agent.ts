@@ -31,6 +31,8 @@ export interface MergeAgentInput {
   model?: string;
   effort?: ClaudeEffort;
   profileId?: string;
+  /** The task's spec dir (model routing by task size) */
+  specDir?: string;
   abortSignal?: AbortSignal;
 }
 
@@ -110,6 +112,8 @@ export const runMergeAgent: MergeAgentFn = async (input) => {
     appendSystemPrompt: systemPrompt(input),
     model: input.model ?? 'opus',
     effort: input.effort ?? 'medium',
+    step: 'merge',
+    specDir: input.specDir,
     cwd: input.worktreePath,
     tools: ['Read', 'Glob', 'Grep', 'Edit', 'Write', 'Bash'],
     allowedTools: ['Edit', 'Write', 'Bash'],

@@ -61,6 +61,8 @@ export interface ClaudeEnvOptions {
   profileId?: string;
   /** Extra variables (applied before credentials, so they cannot override auth) */
   extraEnv?: Record<string, string>;
+  /** Run on this engine (model routing); a profile of the other engine is then ignored */
+  engine?: EngineKind;
 }
 
 /** Git Bash path that Claude Code needs on Windows, derived from git.exe */
@@ -83,7 +85,12 @@ function deriveGitBashPath(gitExePath: string): string | null {
 export async function resolveClaudeEnv(options: ClaudeEnvOptions = {}): Promise<ClaudeEnvResult> {
   // Runs spawned right after startup must know whether Claude Code runs in WSL
   await whenShellRuntimeReady();
-  if ((await pickEngine(options.profileId)) === 'codex') return resolveCodexEnv(options);
+  const engine = options.engine ?? (await pickEngine(options.profileId));
+  // A pinned account of the other engine can't run here: pick the best one of this engine instead
+  if (options.profileId && isCodexAccountId(options.profileId) !== (engine === 'codex')) {
+    options = { ...options, profileId: undefined };
+  }
+  if (engine === 'codex') return resolveCodexEnv(options);
   const wsl = getWslInfo();
 
   // In WSL: the distribution's own claude, and the app's environment as it is (PATH and other
